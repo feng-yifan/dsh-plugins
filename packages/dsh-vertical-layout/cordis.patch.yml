@@ -1,0 +1,5 @@
+# dsh-vertical-layout bundle patch：插入插件行。
+# 插件通过 webserver/index-inject 注入布局脚本，不需要客户端构建。
+- insert:
+    - id: vertical-layout
+      name: dsh-vertical-layout

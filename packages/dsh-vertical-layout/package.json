@@ -1,0 +1,53 @@
+{
+  "name": "dsh-vertical-layout",
+  "version": "1.0.0",
+  "description": "DSH 竖屏布局优化：在电脑屏幕（非手机）竖屏时把右侧栏移到顶部，让对话区域获得完整宽度。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "cordis.dev.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "verify": "tsc -p tsconfig.json --noEmit",
+    "prepare": "npm run build"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "layout",
+    "portrait",
+    "vertical",
+    "deepseek"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/feng-yifan/dsh-vertical-layout"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

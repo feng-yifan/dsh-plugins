@@ -1,0 +1,20 @@
+{
+  "name": "dsh-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "description": "fengyifan 的 DSH 插件 monorepo：dsh-vertical-layout（竖屏布局）、dsh-font-settings（字体设置）等。",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/*' run build",
+    "verify": "pnpm -r --filter './packages/*' run verify",
+    "build:vertical-layout": "pnpm --filter dsh-vertical-layout run build",
+    "build:font-settings": "pnpm --filter dsh-font-settings run build"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@11.5.2"
+}

@@ -1,0 +1,11 @@
+# dsh-vertical-layout 开发 / 本地调试 overlay。
+#
+# 用法（在仓库根目录）：
+#   dsh web --patch ./cordis.dev.patch.yml
+#
+# 插件行 name 使用相对路径，相对本文件所在目录解析（--patch 的 baseUrl）。
+# 依赖 Node >= 22.18 的原生 TypeScript type-stripping 直接加载 .ts 源码；
+# 如需在更旧的 Node 上使用，请先 `pnpm build` 并把 name 改为 ./lib/index.js。
+- insert:
+    - id: vertical-layout
+      name: './src/index.ts'
