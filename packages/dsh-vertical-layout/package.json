@@ -42,7 +42,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/feng-yifan/dsh-vertical-layout"
+    "url": "https://github.com/feng-yifan/dsh-plugins",
+    "directory": "packages/dsh-vertical-layout"
   },
   "devDependencies": {
     "typescript": "^6.0.3"
