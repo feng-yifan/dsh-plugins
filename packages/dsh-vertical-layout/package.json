@@ -1,6 +1,6 @@
 {
   "name": "dsh-vertical-layout",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "DSH 竖屏布局优化：在电脑屏幕（非手机）竖屏时把右侧栏移到顶部，让对话区域获得完整宽度。",
   "type": "module",
   "main": "./lib/index.js",
