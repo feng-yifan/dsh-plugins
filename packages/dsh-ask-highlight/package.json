@@ -1,6 +1,6 @@
 {
   "name": "dsh-ask-highlight",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "DSH 提问块高亮：把对话里已答复的「提问 n/n 已回答」工具块用柔和卡片样式凸显（浅品牌色底 + 圆角）。",
   "type": "module",
   "main": "./lib/index.js",
