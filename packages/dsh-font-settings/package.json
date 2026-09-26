@@ -1,6 +1,6 @@
 {
   "name": "dsh-font-settings",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "DSH 字体设置：单独设置默认正文字体与等宽字体，写入宿主设置文档，浏览器半侧实时应用到 --dsw-font-family / --ds-font-family-code。",
   "type": "module",
   "main": "./lib/index.js",
