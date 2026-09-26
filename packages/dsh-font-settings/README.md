@@ -31,14 +31,7 @@ pnpm verify         # 两侧 --noEmit 类型检查
 
 ### 宿主运行时解析 @deepseek-ai
 
-宿主半侧 `import z from '@deepseek-ai/schemastery'`、`import { getFonts } from 'font-list'` 需要宿主进程能解析。本机约定两个符号链接（`pnpm install` 重建 `node_modules` 后需重做，见仓库根 README）：
-
-```bash
-# 仓库根：@deepseek-ai → 运行中 profile 的 @deepseek-ai（与运行时同版本）
-ln -s ~/.dsh/profiles/node_modules/@deepseek-ai node_modules/@deepseek-ai
-# 包内：@deepseek-ai → 全局 dsh 安装的 @deepseek-ai（客户端类型/编译用，含 dsh-client-store 等）
-ln -s /home/viktor/dev/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai packages/dsh-font-settings/node_modules/@deepseek-ai
-```
+宿主半侧 `import z from '@deepseek-ai/schemastery'`、`import { getFonts } from 'font-list'` 需要宿主进程能解析。构建所需的 `@deepseek-ai/*` 类型由 **devDependencies** 提供（固定 0.1.7-rc.2，与全局 dsh 安装同版本），无需手工符号链接；运行时仍由宿主进程按需提供。
 
 ## 备注
 
