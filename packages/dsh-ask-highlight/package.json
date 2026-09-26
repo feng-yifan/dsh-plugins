@@ -39,6 +39,11 @@
     "deepseek"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/feng-yifan/dsh-plugins",
+    "directory": "packages/dsh-ask-highlight"
+  },
   "devDependencies": {
     "typescript": "^6.0.3"
   },
