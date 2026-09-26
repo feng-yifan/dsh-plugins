@@ -1,0 +1,7 @@
+# dsh-font-settings bundle patch：一行宿主插件。
+# 该行导出 schemastery Config（volatile 字段）→ 宿主设置文档把本条目
+# （id = dsh-font-settings）暴露为同名设置命名空间，浏览器半侧读写它。
+# 浏览器半侧由 package.json 的 dsh.client 声明发现（/plugins/dsh-font-settings/client.js）。
+- insert:
+    - id: dsh-font-settings
+      name: dsh-font-settings

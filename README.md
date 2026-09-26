@@ -1,13 +1,13 @@
 # dsh-plugins
 
-fengyifan 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件 monorepo（pnpm workspace）。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件 monorepo（pnpm workspace）。
 
 ## 包
 
 | 包 | 说明 |
 |---|---|
 | `packages/dsh-vertical-layout` | 竖屏布局优化：电脑竖屏时把右侧栏移到顶部（原独立仓库迁入，历史见原仓库 git）。 |
-| `packages/dsh-font-settings` | 字体设置：在设置页提供「默认字体（界面/正文）」与「等宽字体（代码）」两个独立设置，覆盖 `--dsw-font-family` / `--ds-font-family-code`。 |
+| `packages/dsh-font-settings` | 字体设置：设置页插件卡提供「正文字体」与「等宽字体」两个可搜索下拉（`font-list` 跨平台枚举本机字体），覆盖 `--dsw-font-family` / `--ds-font-family-code`。 |
 
 ## 开发
 

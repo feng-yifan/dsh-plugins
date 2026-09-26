@@ -1,2 +1,7 @@
 packages:
   - 'packages/*'
+
+# 与 dsh profile（~/.dsh/profiles）一致：不自动安装 peer 依赖。
+# 插件在宿主进程里运行，@deepseek-ai/* 由宿主提供；类型/运行时解析经
+# node_modules/@deepseek-ai 符号链接（见 README）。
+autoInstallPeers: false

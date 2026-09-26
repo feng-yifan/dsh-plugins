@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Font Settings",
+    "description": "Set the body and monospace fonts separately, persisted to the DSH settings document and applied live."
+  }
+}
