@@ -1,0 +1,58 @@
+# Publish workspace packages to npm using Trusted Publisher (OIDC), no npm token required.
+# Trigger convention: tag 名称 = 包名@版本（如 dsh-font-settings@0.2.0），版本须与
+# packages/<name>/package.json 的 version 一致。工作流只发布 tag 指定的那个包。
+# npmjs 一次性配置：为 dsh-font-settings（及 dsh-vertical-layout）添加 Trusted Publisher，
+# GitHub 仓库选 feng-yifan/dsh-plugins，见 https://docs.npmjs.com/trusted-publishers
+
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'dsh-font-settings@*'
+      - 'dsh-vertical-layout@*'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 要发布的包
+        required: true
+        type: choice
+        options:
+          - dsh-font-settings
+          - dsh-vertical-layout
+
+permissions:
+  contents: read
+  id-token: write   # Required for OIDC trusted publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - name: Resolve package name
+        id: pkg
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # tag 形如 dsh-font-settings@0.2.0，取 @ 前的包名
+            echo "name=${GITHUB_REF_NAME%@*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.package }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm --filter "${{ steps.pkg.outputs.name }}" run build
+      # npx npm@latest guarantees npm >= 11.5.1 (OIDC trusted publishing requirement);
+      # prepare 脚本会在发布前自动重新构建，tarball 以本次构建产物为准。
+      - name: Publish
+        working-directory: packages/${{ steps.pkg.outputs.name }}
+        run: npx -y npm@latest publish --provenance --access public
