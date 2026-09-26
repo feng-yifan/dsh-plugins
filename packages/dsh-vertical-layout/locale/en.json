@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Vertical Layout",
+    "description": "On desktop (non-mobile) portrait screens, move the right dock to the top so the chat area gets the full width."
+  }
+}

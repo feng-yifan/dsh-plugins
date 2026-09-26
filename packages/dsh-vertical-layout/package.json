@@ -10,11 +10,13 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "src",
+    "locale",
     "cordis.patch.yml",
     "cordis.dev.patch.yml",
     "README.md",
