@@ -1,0 +1,48 @@
+{
+  "name": "dsh-ask-highlight",
+  "version": "0.1.0",
+  "description": "DSH 提问块高亮：把对话里已答复的「提问 n/n 已回答」工具块用柔和卡片样式凸显（浅品牌色底 + 圆角）。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "locale",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "verify": "tsc -p tsconfig.json --noEmit",
+    "prepare": "npm run build"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "highlight",
+    "ask",
+    "deepseek"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

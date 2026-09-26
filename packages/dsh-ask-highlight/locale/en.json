@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ask Highlight",
+    "description": "Highlight answered ask blocks (“question n/n answered”) as a soft card (light tint + rounded corners, theme-aware)."
+  }
+}

@@ -1,0 +1,7 @@
+# dsh-ask-highlight bundle patch：插入插件行。
+# 插件经 webserver/index-inject 注入 <style>（row 类型 kind: 'style'），用稳定
+# 属性选择器 [data-tool="ask_user_question"][data-state="ok"] 高亮对话线程里
+# 已答复的提问块；不构建客户端 bundle，页面刷新即生效。
+- insert:
+    - id: dsh-ask-highlight
+      name: dsh-ask-highlight

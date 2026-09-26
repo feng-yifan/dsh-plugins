@@ -8,6 +8,7 @@
 |---|---|
 | `packages/dsh-vertical-layout` | 竖屏布局优化：电脑竖屏时把右侧栏移到顶部（原独立仓库迁入，历史见原仓库 git）。 |
 | `packages/dsh-font-settings` | 字体设置：设置页插件卡提供「正文字体」与「等宽字体」两个可搜索下拉（`font-list` 跨平台枚举本机字体），覆盖 `--dsw-font-family` / `--ds-font-family-code`。 |
+| `packages/dsh-ask-highlight` | 提问块高亮：已答复的「提问 n/n 已回答」工具块柔和卡片凸显（浅色底 + 圆角）。 |
 
 ## 开发
 
@@ -37,6 +38,7 @@ pnpm run verify       # 类型检查全部包
 # 在 dsh-plugins 仓库根执行（profile 名为 web）：
 dsh plugin --profile web add ./packages/dsh-vertical-layout
 dsh plugin --profile web add ./packages/dsh-font-settings
+dsh plugin --profile web add ./packages/dsh-ask-highlight
 ```
 
 本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。改动后 HMR 热重载，刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
