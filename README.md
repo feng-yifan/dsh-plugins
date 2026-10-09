@@ -7,8 +7,11 @@
 | 包 | 说明 |
 |---|---|
 | `packages/dsh-vertical-layout` | 竖屏布局优化：电脑竖屏时把右侧栏移到顶部（原独立仓库迁入，历史见原仓库 git）。 |
-| `packages/dsh-font-settings` | 字体设置：设置页插件卡提供「正文字体」与「等宽字体」两个可搜索下拉（`font-list` 跨平台枚举本机字体），覆盖 `--dsw-font-family` / `--ds-font-family-code`。 |
+| `packages/dsh-font-settings` | **已废弃（2026-10-10）**：DSH 0.2.x 起内置字体设置（`@deepseek-ai/dsh-client-ui-theme` 的 `textFontFamily` / `codeFontFamily` / `terminalFontFamily`，为超集）。npm 全部版本已标记 deprecated；源码留作参考实现，见 [DEPRECATED.md](packages/dsh-font-settings/DEPRECATED.md)，不再参与版本适配。 |
 | `packages/dsh-ask-highlight` | 提问块高亮：已答复的「提问 n/n 已回答」工具块柔和卡片凸显（浅色底 + 圆角）。 |
+
+> **废弃标记约定**：包目录里放 `DEPRECATED.md` 即表示该包已废弃——`scripts/check-compat.mjs` 与
+> `scripts/update-peer-ranges.mjs` 会跳过它（不再为它做版本适配），CI 也不再 smoke 它。
 
 ## 开发
 
@@ -20,27 +23,29 @@ pnpm run verify       # 类型检查全部包
 
 ### 类型解析约定
 
-客户端插件（dsh-font-settings）会 import `@deepseek-ai/dsh-client-*` 的类型。构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 提供，固定为你当前运行的 dsh 精确版本（现为 `0.2.1-alpha.1`，与全局 dsh 安装同版本），`pnpm install` 后即可在干净环境（含 CI）构建，无需手工符号链接；运行时由 DSH 宿主进程/浏览器模块表提供，构建产物保持 external。
+已归档的 `dsh-font-settings` 会 import `@deepseek-ai/dsh-client-*` 的类型，其构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 固定为写它时的 dsh 精确版本（`0.2.1-alpha.1`），因此该包的类型检查是冻结的、不会再随 dsh 升级而变化。
 
-升级本地 dsh 后应同步这批 devDependencies（见下节「DSH 版本适配」）。
+仍在维护的两个包不 import 任何 `@deepseek-ai/*` 运行时依赖（所需类型在文件内结构化声明，只用 `webserver/index-inject` 与稳定 DOM 属性选择器），因此不需要跟随 dsh 版本升级 devDependencies，也不受 DSH 版本门禁约束。
 
 ### 发布到 npm
 
 发布由 GitHub Actions 自动完成（OIDC trusted publishing + provenance，见 `.github/workflows/npm-publish.yml`）。流程：
 
-1. 升级目标包的版本：`pnpm --filter dsh-font-settings version x.y.z`（或手改 `packages/<pkg>/package.json`），提交并推送。
-2. 打标签并推送：`git tag dsh-font-settings@x.y.z && git push origin dsh-font-settings@x.y.z`（标签名 = 包名@版本，须与 package.json 的 version 一致）。
+1. 升级目标包的版本：`pnpm --filter dsh-vertical-layout version x.y.z`（或手改 `packages/<pkg>/package.json`），提交并推送。
+2. 打标签并推送：`git tag dsh-vertical-layout@x.y.z && git push origin dsh-vertical-layout@x.y.z`（标签名 = 包名@版本，须与 package.json 的 version 一致）。
 3. 工作流构建并 `publish --provenance --access public` 该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。
 
-前置（一次性）：在 npmjs.com 为 `dsh-font-settings`（及 `dsh-vertical-layout`）配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`。
+`dsh-font-settings` 已废弃：`npm-publish.yml` 不再接受它的 tag 触发。给包打废弃标记用该工作流的 `workflow_dispatch`（`action=deprecate` + `message`），撤销需本地执行 `npm deprecate <pkg>@* ""`。
+
+前置（一次性）：在 npmjs.com 为 `dsh-vertical-layout`、`dsh-ask-highlight` 配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`。
 
 ### 安装进 profile
 
 ```bash
 # 在 dsh-plugins 仓库根执行（profile 名为 web）：
 dsh plugin --profile web add ./packages/dsh-vertical-layout
-dsh plugin --profile web add ./packages/dsh-font-settings
 dsh plugin --profile web add ./packages/dsh-ask-highlight
+# dsh-font-settings 已废弃，不要再安装；字体请用 DSH 内置设置（ui-theme）
 ```
 
 本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。改动后 HMR 热重载，刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
@@ -60,8 +65,10 @@ pnpm compat                                   # 用本机 dsh 判定全部插件
 pnpm compat -- --runtime 0.2.1-alpha.2 --json # 针对指定版本预检，JSON 输出
 pnpm compat:update -- --runtime 0.3.0-rc.1    # 只打印需要追加的 peer 波带（dry-run）
 pnpm compat:update -- --runtime 0.3.0-rc.1 --write   # 落盘
-pnpm smoke -- --package dsh-font-settings     # 一次性 DSH_HOME 里真启动 dsh web 验证插件被加载
+pnpm smoke -- --package dsh-ask-highlight --expect-html dsh-ask-highlight
 ```
+
+已废弃的包（目录含 `DEPRECATED.md`）在 `compat` / `compat:update` 中显示为 `deprecated — skipped`，不参与适配。
 
 判定函数取自已安装的 dsh（`--dsh`/`$DSH_BIN` 可指定），保证判定与被测运行时同版本。
 
@@ -71,10 +78,12 @@ pnpm smoke -- --package dsh-font-settings     # 一次性 DSH_HOME 里真启动 
 
 [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 每周（及手动 / `repository_dispatch`）对 `latest` 与 `alpha` 两个渠道执行：
 
-1. 解析目标 dsh 版本；
-2. 按该版本装宿主类型并 `pnpm -r verify`（抓 API 断裂）；
-3. `check-compat` 预检 peer 范围；
-4. 若仅范围过期且 2 通过：`update-peer-ranges --write` → 复跑 verify → 用目标版本跑 smoke → 全绿则开 PR（`chore: support dsh <version>`）；
+1. 解析目标 dsh 版本并装好该版本 CLI；
+2. `pnpm install` + `pnpm -r verify`（类型检查）；
+3. `check-compat` 预检 peer 范围（跳过已废弃的包）；
+4. 若仅范围过期且 2 通过：`update-peer-ranges --write` → 用目标版本跑 smoke → 全绿则开 PR（`chore: support dsh <version>`）；
 5. 任一步失败 → 开 issue 并失败，**不自动改代码**。
+
+**放宽范围前必须先验证**：`pnpm verify` + `pnpm smoke`（目标版本上真启动）都通过，才把新波带写进 peer 范围——否则等于凭空声明支持。
 
 豁免（`dsh plugin allow-version … --accept-risk`）刻意保留为人工操作：它要求明确接受崩溃/数据损坏风险，插件升级与 dsh 升级都不继承。

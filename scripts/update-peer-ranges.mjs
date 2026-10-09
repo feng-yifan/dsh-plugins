@@ -13,6 +13,8 @@
  * 只在目标版本**确实通过** verify + smoke 之后才应由 CI 落盘——放宽范围等于声明支持，
  * 不能凭空放宽。
  *
+ * 已废弃的包（包目录含 DEPRECATED.md）不参与适配，直接跳过。
+ *
  * 退出码：0 = 无待办或已成功落盘；1 = 出错（参数/解析/落盘后复检仍不通过）；2 = 用法/环境错误。
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -95,12 +97,20 @@ function discoverManifests() {
   if (!existsSync(packagesDir)) return []
   return readdirSync(packagesDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => join(packagesDir, entry.name, 'package.json'))
-    .filter((manifestPath) => existsSync(manifestPath))
-    .sort()
+    .map((entry) => {
+      const packageDir = join(packagesDir, entry.name)
+      return { packageDir, manifestPath: join(packageDir, 'package.json') }
+    })
+    .filter((entry) => existsSync(entry.manifestPath))
+    .sort((a, b) => a.manifestPath.localeCompare(b.manifestPath))
 }
 
-for (const manifestPath of discoverManifests()) {
+for (const { packageDir, manifestPath } of discoverManifests()) {
+  // 已废弃的包不再参与适配（包目录里的 DEPRECATED.md 即标记）。
+  if (existsSync(join(packageDir, 'DEPRECATED.md'))) {
+    process.stdout.write(`  skip ${manifestPath.replace(`${repoRoot}/`, '')} (DEPRECATED.md)\n`)
+    continue
+  }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const peers = manifest.peerDependencies ?? {}
   let touched = false

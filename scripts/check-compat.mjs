@@ -10,6 +10,8 @@
  * 名为 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` 的项，与给定运行时版本比较；
  * 未声明这类 peer 的插件不受版本约束（engines 不参与判定）。
  *
+ * 已废弃的包（包目录含 DEPRECATED.md）不参与适配，输出为 deprecated 并跳过。
+ *
  * 退出码：0 = 全部兼容；1 = 至少一个插件会被 DSH 拒绝加载（行被置为 disabled）；2 = 用法/环境错误。
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -68,23 +70,42 @@ try {
   process.exit(2)
 }
 
+/** 已废弃的包：包目录里有 DEPRECATED.md 就不再参与版本适配。 */
+function isDeprecated(packageDir) {
+  return existsSync(join(packageDir, 'DEPRECATED.md'))
+}
+
 /** 发现 packages/* 下的工作区包（按路径排序，输出可复现）。 */
 function discoverPackages() {
   const packagesDir = join(repoRoot, 'packages')
   if (!existsSync(packagesDir)) return []
   return readdirSync(packagesDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => join(packagesDir, entry.name, 'package.json'))
-    .filter((manifestPath) => existsSync(manifestPath))
-    .sort()
+    .map((entry) => {
+      const packageDir = join(packagesDir, entry.name)
+      return { packageDir, manifestPath: join(packageDir, 'package.json') }
+    })
+    .filter((entry) => existsSync(entry.manifestPath))
+    .sort((a, b) => a.manifestPath.localeCompare(b.manifestPath))
 }
 
 const results = []
-for (const manifestPath of discoverPackages()) {
+for (const { packageDir, manifestPath } of discoverPackages()) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   const dshPeers = Object.keys(manifest.peerDependencies ?? {}).filter(
     (name) => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'),
   )
+  if (isDeprecated(packageDir)) {
+    results.push({
+      package: manifest.name,
+      version: manifest.version,
+      dshPeers: dshPeers.length,
+      deprecated: true,
+      compatible: true,
+      unsatisfied: {},
+    })
+    continue
+  }
   let issue
   try {
     issue = oracle.evaluatePluginCompatibility(manifest, {}, runtime)
@@ -117,12 +138,14 @@ if (asJson) {
   process.stdout.write(`DSH runtime: ${runtime}\n`)
   process.stdout.write(`oracle:      ${oracle.source}\n\n`)
   for (const result of results) {
-    const mark = result.compatible ? 'compatible  ' : 'INCOMPATIBLE'
+    const mark = result.deprecated ? 'deprecated ' : result.compatible ? 'compatible ' : 'INCOMPATIBLE'
     process.stdout.write(
       `${mark}  ${result.package}@${result.version}` +
-        (result.dshPeers === 0
-          ? '  (no DSH peers declared)'
-          : `  (${result.dshPeers} DSH peers)`) +
+        (result.deprecated
+          ? '  (DEPRECATED.md — skipped)'
+          : result.dshPeers === 0
+            ? '  (no DSH peers declared)'
+            : `  (${result.dshPeers} DSH peers)`) +
         '\n',
     )
     for (const [name, range] of Object.entries(result.unsatisfied)) {

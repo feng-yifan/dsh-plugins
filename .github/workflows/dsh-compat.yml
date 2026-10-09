@@ -11,11 +11,13 @@
 # 步骤分工：
 #   1. 解析目标版本并装好该版本的 dsh CLI —— `check-compat` / `smoke` 的判定函数与
 #      运行时都取自这份安装，保证「判定 = 被测运行时」；
-#   2. 把宿主类型依赖临时钉到目标版本（仅 CI，绝不提交），跑 `verify` 抓 API 断裂；
-#   3. `git checkout -- .` 丢弃临时钉版，回到干净树，再做兼容预检与放宽；
-#   4. 需要放宽时：update-peer-ranges --write → smoke → 提交 packages/*/package.json → 开 PR；
-#      不需要放宽时：仍跑一遍 smoke 作为新版本上的回归检查；
+#   2. `pnpm install` + `verify`（类型检查，抓 API 断裂）；
+#   3. 兼容预检；需要放宽时 update-peer-ranges --write；
+#   4. 用目标版本真机 smoke 仍在维护的插件；放宽过就提交 packages/*/package.json 并开 PR；
 #   5. 任何硬失败开/更新 issue，不尝试自动修代码。
+#
+# 已废弃的包（包目录含 DEPRECATED.md，如 dsh-font-settings）不参与适配：
+# check-compat / update-peer-ranges 会跳过，smoke 也不包含它们。
 
 name: DSH compatibility
 
@@ -114,24 +116,8 @@ jobs:
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      # 宿主同级包与 dsh 同版本发布；类型解析必须用目标版本的 .d.ts。
-      # 这些 manifest 改动仅存在于 CI，verify 之后立即丢弃（见下一步）。
-      - name: Pin host type dependencies to the target version (CI only)
-        env:
-          V: ${{ steps.resolve.outputs.version }}
-        run: |
-          set -euo pipefail
-          pnpm --filter dsh-font-settings add -D \
-            "@deepseek-ai/dsh-client-store@$V" \
-            "@deepseek-ai/dsh-client-ui-primitives@$V" \
-            "@deepseek-ai/dsh-settings@$V" \
-            "@deepseek-ai/dsh-typert-protocol@$V"
-
-      - name: Verify workspace against the target host types
+      - name: Verify workspace
         run: pnpm -r --filter './packages/*' run verify
-
-      - name: Drop CI-only dependency pins
-        run: git checkout -- .
 
       - name: Compatibility preflight
         id: compat
@@ -146,12 +132,12 @@ jobs:
           V: ${{ steps.resolve.outputs.version }}
         run: node scripts/update-peer-ranges.mjs --runtime "$V" --write
 
-      # 无论是否需要放宽，都用目标版本真机跑一遍三个插件：
-      # 客户端插件断言启动图与 bundle，宿主插件断言 index-inject 标记。
+      # 无论是否需要放宽，都用目标版本真机跑一遍仍在维护的插件：
+      # 宿主插件断言 index-inject 标记。（dsh-font-settings 已废弃，见其 DEPRECATED.md，
+      # check-compat/update-peer-ranges 会跳过它。）
       - name: Runtime smoke test on the target DSH
         run: |
           set -euo pipefail
-          node scripts/smoke-plugin.mjs --package dsh-font-settings
           node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
           node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
 
@@ -179,7 +165,7 @@ jobs:
           git push --force origin "$BRANCH"
 
           BODY_FILE="$RUNNER_TEMP/pr-body.md"
-          printf 'DSH `%s` (%s) 不在当前 `@deepseek-ai/dsh-*` peer 范围覆盖内，本 PR 只放宽范围。\n\n验证（均在 `%s` 上执行并通过）：\n- `pnpm -r --filter %s run verify`（宿主类型钉到该版本后 tsc 通过，无 API 断裂）\n- `node scripts/check-compat.mjs --runtime %s`（放宽后判定全部兼容）\n- `node scripts/smoke-plugin.mjs`（真启动该版本 dsh web，三个插件均正常加载）\n\n仅改动 `packages/*/package.json` 的 `peerDependencies` 范围，未改插件代码与依赖版本。\n\nRun: %s\n' \
+          printf 'DSH `%s` (%s) 不在当前 `@deepseek-ai/dsh-*` peer 范围覆盖内，本 PR 只放宽范围。\n\n验证（均在 `%s` 上执行并通过）：\n- `pnpm -r --filter %s run verify`（tsc 通过，无 API 断裂）\n- `node scripts/check-compat.mjs --runtime %s`（放宽后判定全部兼容）\n- `node scripts/smoke-plugin.mjs`（真启动该版本 dsh web，仍在维护的插件均正常加载）\n\n仅改动 `packages/*/package.json` 的 `peerDependencies` 范围，未改插件代码与依赖版本。\n\nRun: %s\n' \
             "$V" "$CHANNEL" "$V" "'./packages/*'" "$V" "$RUN_URL" > "$BODY_FILE"
 
           if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then

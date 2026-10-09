@@ -1,5 +1,9 @@
 # dsh-font-settings
 
+> ⚠️ **已废弃（2026-10-10）**：DSH 0.2.x 起内置字体设置（`@deepseek-ai/dsh-client-ui-theme` 的
+> `textFontFamily` / `codeFontFamily` / `terminalFontFamily`，为超集），本插件不再维护、不再发版。
+> 见 [DEPRECATED.md](./DEPRECATED.md)。以下内容仅作参考实现存档。
+
 DSH（DeepSeek Harness）字体设置插件：**单独设置默认正文字体与等宽字体**，写入宿主设置文档，浏览器半侧实时应用到 `--dsw-font-family` / `--ds-font-family-code`。
 
 ## 功能
