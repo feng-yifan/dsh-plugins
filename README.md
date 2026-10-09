@@ -35,7 +35,9 @@ pnpm run verify       # 类型检查全部包
 2. 打标签并推送：`git tag dsh-vertical-layout@x.y.z && git push origin dsh-vertical-layout@x.y.z`（标签名 = 包名@版本，须与 package.json 的 version 一致）。
 3. 工作流构建并 `publish --provenance --access public` 该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。
 
-`dsh-font-settings` 已废弃：`npm-publish.yml` 不再接受它的 tag 触发。给包打废弃标记用该工作流的 `workflow_dispatch`（`action=deprecate` + `message`），撤销需本地执行 `npm deprecate <pkg>@* ""`。
+`dsh-font-settings` 已废弃：`npm-publish.yml` 不再接受它的 tag 触发，也不在手动发布的包列表里。
+
+**npm 上的 deprecated 标记需人工打**：npm 的 Trusted Publishing(OIDC) 只覆盖发布类命令，`npm deprecate` 走 OIDC 会因未认证返回 404（2026-10-10 在 npm 12.2.0 上实测）。到 npmjs.com 包页 Settings → Deprecate，或用有写权限的凭据本地执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
 
 前置（一次性）：在 npmjs.com 为 `dsh-vertical-layout`、`dsh-ask-highlight` 配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`。
 

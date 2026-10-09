@@ -25,7 +25,9 @@
 
 **本包状态**：
 
-- npm 上全部版本已标记 deprecated，不再发布新版本；
+- 不再发布新版本（`npm-publish.yml` 已摘除其 tag 触发与手动发布列表）。npm 上的 deprecated
+  标记须人工在包页 Settings → Deprecate 执行——OIDC Trusted Publishing 不覆盖 `npm deprecate`
+  （2026-10-10 在 npm 12.2.0 上实测 PUT 未认证返回 404）；
 - 已从 CI 的版本适配中摘除：`scripts/check-compat.mjs` / `scripts/update-peer-ranges.mjs` 遇到本目录的 `DEPRECATED.md` 会跳过该包，`dsh-compat.yml` 不再为它做目标版本类型检查与 smoke；
-- `npm-publish.yml` 不再接受 `dsh-font-settings@*` 的 tag 触发；
+- `npm-publish.yml` 不再接受 `dsh-font-settings@*` 的 tag 触发，也不在手动发布列表中；
 - 源码保留在本目录，仅作参考实现（宿主设置命名空间 + Typert remote + 客户端表单那一套的样例），**不再保证与新版 DSH 兼容**。

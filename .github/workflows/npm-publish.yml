@@ -3,13 +3,14 @@
 # 发布：tag 名称 = 包名@版本（如 dsh-vertical-layout@1.1.0），版本须与
 # packages/<name>/package.json 的 version 一致；也可用 workflow_dispatch 手动补发。
 #
-# 废弃（deprecate）：workflow_dispatch 选 action=deprecate + 填 message，对该包**全部版本**
-# 打上 deprecated 标记（不改动已发布内容）。撤销需在本地执行 `npm deprecate <pkg>@* ""`，
-# 本工作流只负责打标记。
+# 废弃标记不在这里做：npm 的 Trusted Publishing(OIDC) 只覆盖发布类命令，
+# `npm deprecate` 走 OIDC 会因未认证返回 404（2026-10-10 在 npm 12.2.0 上实测）。
+# 给包打 deprecated 标记请到 npmjs.com 包页 Settings → Deprecate，或在本地用有写权限的
+# 凭据执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
 #
 # `dsh-font-settings` 已废弃（见 packages/dsh-font-settings/DEPRECATED.md）：不再接受其 tag 发布，
-# 仅保留 deprecate 入口。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight（历史上含
-# dsh-font-settings）配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
+# 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight
+# 配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
 # 见 https://docs.npmjs.com/trusted-publishers
 
 name: Publish to npm
@@ -21,27 +22,13 @@ on:
       - 'dsh-ask-highlight@*'
   workflow_dispatch:
     inputs:
-      action:
-        description: 操作（deprecate 时对该包全部版本打废弃标记，不发布）
-        required: true
-        type: choice
-        default: publish
-        options:
-          - publish
-          - deprecate
       package:
-        description: 目标包（publish 时须与 tag/版本一致的包；dsh-font-settings 已废弃，仅可 deprecate）
+        description: 要发布的包
         required: true
         type: choice
         options:
           - dsh-vertical-layout
           - dsh-ask-highlight
-          - dsh-font-settings
-      message:
-        description: deprecate 说明（action=deprecate 时必填）
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -49,7 +36,6 @@ permissions:
 
 jobs:
   publish:
-    if: ${{ !inputs.action || inputs.action == 'publish' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,23 +65,3 @@ jobs:
       - name: Publish
         working-directory: packages/${{ steps.pkg.outputs.name }}
         run: npx -y npm@latest publish --provenance --access public
-
-  deprecate:
-    if: ${{ inputs.action == 'deprecate' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          registry-url: https://registry.npmjs.org/
-      - name: Mark every version deprecated
-        env:
-          PKG: ${{ inputs.package }}
-          MSG: ${{ inputs.message }}
-        run: |
-          set -euo pipefail
-          if [ -z "$MSG" ]; then
-            echo "::error::input 'message' is required when action=deprecate"
-            exit 1
-          fi
-          npx -y npm@latest deprecate "$PKG@*" "$MSG"
