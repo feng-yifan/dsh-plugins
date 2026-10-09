@@ -20,7 +20,9 @@ pnpm run verify       # 类型检查全部包
 
 ### 类型解析约定
 
-客户端插件（dsh-font-settings）会 import `@deepseek-ai/dsh-client-*` 的类型。构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 提供（固定 0.1.7-rc.2，与全局 dsh 安装同版本），`pnpm install` 后即可在干净环境（含 CI）构建，无需手工符号链接；运行时由 DSH 宿主进程/浏览器模块表提供，构建产物保持 external。
+客户端插件（dsh-font-settings）会 import `@deepseek-ai/dsh-client-*` 的类型。构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 提供，固定为你当前运行的 dsh 精确版本（现为 `0.2.1-alpha.1`，与全局 dsh 安装同版本），`pnpm install` 后即可在干净环境（含 CI）构建，无需手工符号链接；运行时由 DSH 宿主进程/浏览器模块表提供，构建产物保持 external。
+
+升级本地 dsh 后应同步这批 devDependencies（见下节「DSH 版本适配」）。
 
 ### 发布到 npm
 
@@ -42,3 +44,37 @@ dsh plugin --profile web add ./packages/dsh-ask-highlight
 ```
 
 本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。改动后 HMR 热重载，刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
+
+## DSH 版本适配
+
+### DSH 怎么判定插件兼容
+
+DSH 在组合 profile 前读取每个插件的 `peerDependencies`，把其中名为 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` 的项与运行中的 dsh 版本比较（预发布版本参与范围匹配）。**未声明这类 peer 的插件不受版本约束**；`engines` 不参与判定。任一 peer 不满足，该插件行会被置为 `disabled` 且模块永不导入；组合包（bundle）不兼容则整体被跳过。安装时同样检查——不兼容的包在 pnpm 运行前就被拒绝。
+
+因此 `@deepseek-ai/dsh-*` 的 peer 范围就是插件的**支持矩阵**：范围覆盖哪个版本，就等于声明支持哪个版本。
+
+### 本地命令
+
+```bash
+pnpm compat                                   # 用本机 dsh 判定全部插件（退出码 1 = 会被拒绝加载）
+pnpm compat -- --runtime 0.2.1-alpha.2 --json # 针对指定版本预检，JSON 输出
+pnpm compat:update -- --runtime 0.3.0-rc.1    # 只打印需要追加的 peer 波带（dry-run）
+pnpm compat:update -- --runtime 0.3.0-rc.1 --write   # 落盘
+pnpm smoke -- --package dsh-font-settings     # 一次性 DSH_HOME 里真启动 dsh web 验证插件被加载
+```
+
+判定函数取自已安装的 dsh（`--dsh`/`$DSH_BIN` 可指定），保证判定与被测运行时同版本。
+
+**放宽范围前必须先验证**：`pnpm verify`（对目标版本的宿主类型编译）+ `pnpm smoke` 都通过，才把新波带写进 peer 范围——否则等于凭空声明支持。
+
+### 流水线自动适应
+
+[`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 每周（及手动 / `repository_dispatch`）对 `latest` 与 `alpha` 两个渠道执行：
+
+1. 解析目标 dsh 版本；
+2. 按该版本装宿主类型并 `pnpm -r verify`（抓 API 断裂）；
+3. `check-compat` 预检 peer 范围；
+4. 若仅范围过期且 2 通过：`update-peer-ranges --write` → 复跑 verify → 用目标版本跑 smoke → 全绿则开 PR（`chore: support dsh <version>`）；
+5. 任一步失败 → 开 issue 并失败，**不自动改代码**。
+
+豁免（`dsh plugin allow-version … --accept-risk`）刻意保留为人工操作：它要求明确接受崩溃/数据损坏风险，插件升级与 dsh 升级都不继承。

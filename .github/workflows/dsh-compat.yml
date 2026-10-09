@@ -1,0 +1,222 @@
+# DSH compatibility
+#
+# 目标：自动跟踪 DSH 发布（每周定时、`dsh-release` repository_dispatch、或手动触发），
+# 用**目标版本**验证本仓库全部插件，并在「只是 peer 范围过期」时自动开一个只改
+# `@deepseek-ai/dsh-*` peer 范围的 PR——不自动改插件代码，也不自动发版。
+#
+# 判定依据：DSH 按插件 package.json 中 `@deepseek-ai/dsh` / `@deepseek-ai/dsh-*` 的
+# peerDependencies 决定是否加载插件；范围不覆盖运行中的版本就拒绝加载（安装阶段即拒绝）。
+# 因此 peer 范围就是「支持矩阵」，本工作流只在**验证通过**之后才放宽它。
+#
+# 步骤分工：
+#   1. 解析目标版本并装好该版本的 dsh CLI —— `check-compat` / `smoke` 的判定函数与
+#      运行时都取自这份安装，保证「判定 = 被测运行时」；
+#   2. 把宿主类型依赖临时钉到目标版本（仅 CI，绝不提交），跑 `verify` 抓 API 断裂；
+#   3. `git checkout -- .` 丢弃临时钉版，回到干净树，再做兼容预检与放宽；
+#   4. 需要放宽时：update-peer-ranges --write → smoke → 提交 packages/*/package.json → 开 PR；
+#      不需要放宽时：仍跑一遍 smoke 作为新版本上的回归检查；
+#   5. 任何硬失败开/更新 issue，不尝试自动修代码。
+
+name: DSH compatibility
+
+on:
+  schedule:
+    # 每周一 02:00 UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 精确 DSH 版本（留空则按 channel 取最新）
+        required: false
+        type: string
+        default: ''
+      channel:
+        description: DSH 发布渠道（version 留空时生效）
+        required: true
+        type: choice
+        default: latest
+        options:
+          - latest
+          - alpha
+  repository_dispatch:
+    types: [dsh-release]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  compat:
+    name: dsh ${{ matrix.channel }} compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 默认两个渠道都测；手动指定精确版本时只测一次。
+        channel: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.version != '' && '["latest"]' || '["latest","alpha"]') }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+
+      - name: Resolve target DSH version
+        id: resolve
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel || matrix.channel }}
+        run: |
+          set -euo pipefail
+          SPEC="${REQUESTED_VERSION:-$CHANNEL}"
+          VERSION="$(npm view "@deepseek-ai/dsh@$SPEC" version 2>/dev/null | tail -n1 | tr -d '[:space:]"')"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve a version for @deepseek-ai/dsh@$SPEC"
+            exit 1
+          fi
+          echo "Resolved @deepseek-ai/dsh@$SPEC -> $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+      # 先装目标 dsh：check-compat / smoke 的判定函数、以及被 smoke 启动的 CLI
+      # 都来自这份安装（脚本会优先从 dsh 安装里加载 @deepseek-ai/dsh-app-boot）。
+      - name: Install target DSH CLI
+        env:
+          V: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm i -g "@deepseek-ai/dsh@$V"
+          INSTALLED="$(dsh --version)"
+          if [ "$INSTALLED" != "$V" ]; then
+            echo "::error::installed dsh version $INSTALLED does not match $V"
+            exit 1
+          fi
+          echo "dsh $INSTALLED installed"
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 宿主同级包与 dsh 同版本发布；类型解析必须用目标版本的 .d.ts。
+      # 这些 manifest 改动仅存在于 CI，verify 之后立即丢弃（见下一步）。
+      - name: Pin host type dependencies to the target version (CI only)
+        env:
+          V: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          pnpm --filter dsh-font-settings add -D \
+            "@deepseek-ai/dsh-client-store@$V" \
+            "@deepseek-ai/dsh-client-ui-primitives@$V" \
+            "@deepseek-ai/dsh-settings@$V" \
+            "@deepseek-ai/dsh-typert-protocol@$V"
+
+      - name: Verify workspace against the target host types
+        run: pnpm -r --filter './packages/*' run verify
+
+      - name: Drop CI-only dependency pins
+        run: git checkout -- .
+
+      - name: Compatibility preflight
+        id: compat
+        continue-on-error: true
+        env:
+          V: ${{ steps.resolve.outputs.version }}
+        run: node scripts/check-compat.mjs --runtime "$V"
+
+      - name: Widen stale DSH peer ranges
+        if: ${{ steps.compat.outcome == 'failure' }}
+        env:
+          V: ${{ steps.resolve.outputs.version }}
+        run: node scripts/update-peer-ranges.mjs --runtime "$V" --write
+
+      # 无论是否需要放宽，都用目标版本真机跑一遍三个插件：
+      # 客户端插件断言启动图与 bundle，宿主插件断言 index-inject 标记。
+      - name: Runtime smoke test on the target DSH
+        run: |
+          set -euo pipefail
+          node scripts/smoke-plugin.mjs --package dsh-font-settings
+          node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
+          node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
+
+      - name: Open pull request widening peer ranges
+        if: ${{ steps.compat.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.resolve.outputs.version }}
+          CHANNEL: ${{ steps.resolve.outputs.channel }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- 'packages/*/package.json'; then
+            echo "::error::check-compat reported an incompatible plugin but no peer range changed"
+            exit 1
+          fi
+          BRANCH="compat/dsh-$V"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          # 只提交 peer 范围；不把重建产物或任何依赖版本带进 PR。
+          git add 'packages/*/package.json'
+          git commit -m "chore: widen DSH peer ranges for dsh $V"
+          git push --force origin "$BRANCH"
+
+          BODY_FILE="$RUNNER_TEMP/pr-body.md"
+          printf 'DSH `%s` (%s) 不在当前 `@deepseek-ai/dsh-*` peer 范围覆盖内，本 PR 只放宽范围。\n\n验证（均在 `%s` 上执行并通过）：\n- `pnpm -r --filter %s run verify`（宿主类型钉到该版本后 tsc 通过，无 API 断裂）\n- `node scripts/check-compat.mjs --runtime %s`（放宽后判定全部兼容）\n- `node scripts/smoke-plugin.mjs`（真启动该版本 dsh web，三个插件均正常加载）\n\n仅改动 `packages/*/package.json` 的 `peerDependencies` 范围，未改插件代码与依赖版本。\n\nRun: %s\n' \
+            "$V" "$CHANNEL" "$V" "'./packages/*'" "$V" "$RUN_URL" > "$BODY_FILE"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --title "chore: support dsh $V" --body-file "$BODY_FILE"
+          else
+            gh pr create --title "chore: support dsh $V" --body-file "$BODY_FILE" \
+              --base "$DEFAULT_BRANCH" --head "$BRANCH"
+          fi
+
+      - name: Report failure as an issue
+        if: ${{ failure() }}
+        uses: actions/github-script@v7
+        env:
+          V: ${{ steps.resolve.outputs.version }}
+          CHANNEL: ${{ steps.resolve.outputs.channel || matrix.channel }}
+        with:
+          script: |
+            const version = process.env.V || 'unknown'
+            const channel = process.env.CHANNEL || 'unknown'
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const title = `DSH compat: dsh ${version} fails`
+            const body = [
+              `The compatibility pipeline failed while testing the plugins against DSH **${version}** (channel \`${channel}\`).`,
+              '',
+              `Run: ${runUrl}`,
+              '',
+              'A failure here usually means a real API break in the DSH surface rather than a stale peer',
+              'range. Fix the plugin code, then re-run the workflow. No automatic code fix was attempted.',
+            ].join('\n')
+            const { data: issues } = await github.rest.issues.listForRepo({
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            })
+            const existing = issues.find((issue) => issue.title === title)
+            if (existing) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body })
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body })
+            }

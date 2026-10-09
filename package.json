@@ -7,6 +7,9 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/*' run build",
     "verify": "pnpm -r --filter './packages/*' run verify",
+    "compat": "node scripts/check-compat.mjs",
+    "compat:update": "node scripts/update-peer-ranges.mjs",
+    "smoke": "node scripts/smoke-plugin.mjs",
     "build:vertical-layout": "pnpm --filter dsh-vertical-layout run build",
     "build:font-settings": "pnpm --filter dsh-font-settings run build",
     "build:ask-highlight": "pnpm --filter dsh-ask-highlight run build"
