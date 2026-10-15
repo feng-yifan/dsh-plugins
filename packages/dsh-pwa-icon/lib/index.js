@@ -22,6 +22,13 @@
  *      manifest 文件名时不会静默失效）；
  *   4. 未配置 `icon` 时只打一条 warn，不注册任何路由，不影响启动。
  *
+ * **挂载前缀**：两个路由路径是**后端**路径（反向代理剥掉前缀后看到的）。对外 URL 缺省用
+ * 相对形式（`./manifest.webmanifest` / `./pwa/icon.webp` / `start_url`、`scope` = `./`），
+ * 与 DSH 自带 dist manifest 同款——页面挂在 `<前缀>/` 下时自动带上前缀，因此「根挂载」与
+ * 「反向代理剥前缀（如 DSH 经网关挂在 `/dsh`）」两种部署都成立；写死根绝对路径会让后者的
+ * manifest 与图标都 404，浏览器只能回落到自动生成的图标（本机 2026-10-15 实际踩过）。
+ * 页面不在挂载根时用 `publicBase` 显式给出前缀。
+ *
  * 注意：两个路由都是公开静态路由。浏览器取 manifest 图标时不带凭据，
  * 若加认证门会取不到图标，因此图片本身对能访问该端口的网络可见
  * （与现有的 favicon / dist manifest 同性质）。
@@ -44,15 +51,41 @@ export const name = 'pwa-icon';
 export const inject = ['webServer'];
 /**
  * manifest 默认字段，对齐当前 DSH 发布版 dist 的 `manifest.webmanifest`。
- * `start_url` / `scope` 用根绝对路径，从而与 manifest 挂在哪个路径无关。
+ * `start_url` / `scope` 由调用方按挂载方式给出（缺省 `./`，即 manifest 自身所在目录）。
+ * @param startUrl - `start_url` 与 `scope` 的值。
  */
-const DEFAULT_MANIFEST = {
-    name: 'DeepSeek Harness',
-    short_name: 'DSH',
-    start_url: '/',
-    scope: '/',
-    display: 'fullscreen',
-};
+function defaultManifest(startUrl) {
+    return {
+        name: 'DeepSeek Harness',
+        short_name: 'DSH',
+        start_url: startUrl,
+        scope: startUrl,
+        display: 'fullscreen',
+    };
+}
+/** 去掉前导斜杠：`/pwa/icon.webp` → `pwa/icon.webp`（供相对 URL 拼接）。 */
+function relativeFromRoot(path) {
+    return path.replace(/^\/+/, '');
+}
+/**
+ * 规范化 `publicBase`：缺省返回 `''`（表示对外用相对路径），否则返回不带尾斜杠的前缀。
+ * @param value - config 里的值。
+ * @param ctx - 宿主上下文（用于告警）。
+ * @returns 规范化后的前缀，或 undefined 表示非法（调用方放弃加载）。
+ */
+function publicBaseOf(value, ctx) {
+    if (value === undefined)
+        return '';
+    const base = value.trim().replace(/\/+$/, '');
+    if (base === '')
+        return '';
+    if (!base.startsWith('/') || base.includes('?') || base.includes('#')) {
+        ctx.logger?.warn?.(`pwa-icon: config.publicBase must look like "/dsh" (got ${JSON.stringify(value)}); ` +
+            'omit it to use relative URLs, which work behind a prefix-stripping proxy');
+        return undefined;
+    }
+    return base;
+}
 /** 常见图片扩展名 → MIME。 */
 const MIME_BY_EXTENSION = {
     '.webp': 'image/webp',
@@ -103,9 +136,14 @@ export function replaceManifestLink(html, href) {
     }
     return `${markup}${stripped}`;
 }
-/** 组装要返回的 manifest 对象。 */
-export function buildManifest(config, iconEntry) {
-    const manifest = { ...DEFAULT_MANIFEST, ...(config.manifest ?? {}) };
+/**
+ * 组装要返回的 manifest 对象。
+ * @param config - 插件配置。
+ * @param iconEntry - 由 `icon` 生成的 icon 项。
+ * @param startUrl - `start_url` / `scope` 的默认值。
+ */
+export function buildManifest(config, iconEntry, startUrl) {
+    const manifest = { ...defaultManifest(startUrl), ...(config.manifest ?? {}) };
     if (!Array.isArray(manifest.icons))
         manifest.icons = [iconEntry];
     return manifest;
@@ -174,7 +212,18 @@ export function apply(ctx, rawConfig) {
         ctx.logger?.warn?.('pwa-icon: config.manifestUrl and config.iconUrl must differ — the plugin stays inactive');
         return;
     }
+    const publicBase = publicBaseOf(config.publicBase, ctx);
+    if (publicBase === undefined)
+        return;
     const appleTouchIcon = config.appleTouchIcon !== false;
+    // 对外 URL：缺省相对（页面在 <前缀>/ 下时自动带上前缀，根挂载同样成立），
+    // 只有显式配了 publicBase 才用绝对形式。
+    // - manifestHref / iconHref 是**页面**里的链接（相对页面目录）
+    // - manifestIconSrc 在 manifest 里，按规范相对 **manifest URL** 解析，故不带前导 `./` 也一样到挂载根
+    const manifestHref = publicBase === '' ? `./${relativeFromRoot(manifestUrl)}` : `${publicBase}${manifestUrl}`;
+    const iconHref = publicBase === '' ? `./${relativeFromRoot(iconUrl)}` : `${publicBase}${iconUrl}`;
+    const manifestIconSrc = publicBase === '' ? relativeFromRoot(iconUrl) : `${publicBase}${iconUrl}`;
+    const startUrl = publicBase === '' ? './' : `${publicBase}/`;
     if (!existsSync(iconFile)) {
         // 不阻断注册：文件随后出现即可生效（图片路由每次请求重读），只是把静默失败变成启动期可见。
         ctx.logger?.warn?.(`pwa-icon: icon file ${iconFile} does not exist yet — the icon route answers 404 until it appears`);
@@ -186,7 +235,7 @@ export function apply(ctx, rawConfig) {
         sizes = 'any';
     }
     const iconEntry = {
-        src: iconUrl,
+        src: manifestIconSrc,
         sizes: sizes ?? 'any',
         type: imageType,
         purpose: typeof config.purpose === 'string' && config.purpose.trim() !== '' ? config.purpose.trim() : 'any',
@@ -200,7 +249,7 @@ export function apply(ctx, rawConfig) {
                 respond(req, res, 405, { allow: 'GET, HEAD' });
                 return;
             }
-            const body = `${JSON.stringify(buildManifest(config, iconEntry), null, 2)}\n`;
+            const body = `${JSON.stringify(buildManifest(config, iconEntry, startUrl), null, 2)}\n`;
             respond(req, res, 200, {
                 'content-type': 'application/manifest+json; charset=utf-8',
                 'content-length': String(Buffer.byteLength(body)),
@@ -240,11 +289,11 @@ export function apply(ctx, rawConfig) {
             table.push({
                 kind: 'html',
                 placement: 'head',
-                html: `<link rel="apple-touch-icon" href="${escapeAttribute(iconUrl)}">`,
+                html: `<link rel="apple-touch-icon" href="${escapeAttribute(iconHref)}">`,
             });
         });
     }
     // 页面原有的 manifest 链接改指向本插件路由（只保留一条）。
-    ctx.effect(() => ctx.webServer.tapIndex((html) => replaceManifestLink(html, manifestUrl)), 'pwa-icon: manifest link rewrite');
+    ctx.effect(() => ctx.webServer.tapIndex((html) => replaceManifestLink(html, manifestHref)), 'pwa-icon: manifest link rewrite');
 }
 //# sourceMappingURL=index.js.map

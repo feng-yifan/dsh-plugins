@@ -13,6 +13,10 @@ Chromium 的 PWA 安装图标只取 Web App Manifest 的 `icons`（当前 DSH �
 3. 经 `webserver/index-inject` 注入 `<link rel="apple-touch-icon">`（可用 `appleTouchIcon: false` 关闭），并用 `webServer.tapIndex` 把页面原有的 `<link rel="manifest">` 换成指向本插件路由的那一个——将来 DSH 换 manifest 文件名时不会静默失效；
 4. 未配置 `icon` 时只打一条 warn、不注册任何路由，不影响启动；`icon` 指向的文件当前不存在也只 warn（路由照常注册，文件随后出现即生效）；`manifestUrl` / `iconUrl` 不是以 `/` 开头的绝对路径、或两者相同 → warn 后放弃加载（命名路由按 pathname 精确匹配，非法路径会静默永不命中）。
 
+**挂载前缀（重要）**：`manifestUrl` / `iconUrl` 是**后端**路径（反向代理剥掉前缀后 DSH 看到的路径）；对外 URL 缺省一律用**相对形式**——注入的链接是 `./manifest.webmanifest`、`apple-touch-icon` 是 `./pwa/icon.webp`、manifest 的 `start_url`/`scope` 是 `./`、`icons[].src` 是相对 manifest 的 `pwa/icon.webp`，与 DSH 自带 dist manifest 同款。这样「根挂载」和「反向代理剥前缀」（如 DSH 经网关挂在 `/dsh` 下）两种部署都成立。
+
+> 写死根绝对路径（`/manifest.webmanifest`、`start_url: "/"`）在 `/dsh` 这类挂载下会 404，浏览器取不到 manifest 与图标，只能回落到**自动生成的图标**（站点徽标 + 应用名的色块）——本机 2026-10-15 实际踩过。仅当页面不在挂载根时才用 `publicBase` 显式给出前缀。
+
 Chromium 的安装判定要求图标为 PNG / SVG / **WebP** 且 ≥144px，并且 **`sizes` 属性必须显式声明**（原文：`Manifest does not contain a suitable icon - PNG, SVG or WebP format of at least 144px is required, the sizes attribute must be set, and the purpose attribute, if set, must include "any" or "maskable".`）。因此位图务必在配置里写真实尺寸。
 
 ## 安装
@@ -46,8 +50,9 @@ dsh plugin --profile web add ./packages/dsh-pwa-icon
 | `sizes` | SVG 为 `any`，其它格式为 `any` + warn | manifest icon 的 `sizes`，位图请写真实尺寸 |
 | `type` | 按扩展名判定 | 只接受 `image/*`（否则 warn 并回落到扩展名判定）；`.webp` / `.png` / `.jpg` / `.jpeg` / `.svg` / `.gif` / `.avif` / `.ico` |
 | `purpose` | `any` | manifest icon 的 `purpose` |
-| `iconUrl` | `/pwa/icon<扩展名>` | 图片对外 URL 路径（必须以 `/` 开头，且与 `manifestUrl` 不同） |
-| `manifestUrl` | `/manifest.webmanifest` | manifest 对外 URL 路径（必须以 `/` 开头） |
+| `iconUrl` | `/pwa/icon<扩展名>` | 图片在**服务端**的路由路径（必须以 `/` 开头，且与 `manifestUrl` 不同）；对外 URL 缺省按相对路径发出 |
+| `manifestUrl` | `/manifest.webmanifest` | manifest 在**服务端**的路由路径（必须以 `/` 开头）；对外 URL 缺省按相对路径发出 |
+| `publicBase` | 无（用相对路径） | 浏览器看到的挂载前缀（如 `/dsh`），仅当页面不在挂载根时才需要；填了则对外 URL 用 `<publicBase><路由路径>` 绝对形式 |
 | `manifest` | 无 | 合并进 manifest 的额外字段（覆盖默认值）；若显式给出 `icons` 数组则完全按它来 |
 | `appleTouchIcon` | `true` | 是否注入 `<link rel="apple-touch-icon">` |
 
@@ -56,7 +61,7 @@ dsh plugin --profile web add ./packages/dsh-pwa-icon
 - **已安装的 PWA 不会自动换图标**：安装图标是安装时抓取的，需先从浏览器卸载（或删除桌面快捷方式），再从菜单重新「安装 / 添加到桌面」。
 - **iOS 的 `apple-touch-icon` 建议另配 PNG**：Safari 对该链接的 WebP 支持有限、且通常期望 180×180 的 PNG；本插件只按原样提供配置的那张图，不做缩放/转码（Chromium 侧走 manifest，WebP 没问题）。
 - **两个路由都是公开静态路由**：浏览器取 manifest 图标不带凭据，加认证门会导致取不到图标，因此图片对能访问该端口的网络可见（与现有 favicon、dist manifest 同性质）。若需收敛，可把 `iconUrl` 改成带随机令牌的路径。
-- **子路径部署需自行调整**：默认 `iconUrl` / `manifestUrl` / manifest 的 `start_url`、`scope` 都按「GUI 挂在 origin 根」写绝对路径；若将来经反代挂到 `/dsh/` 这类前缀下，需要用 config 改成对应前缀（dist 自身用 `./` 相对链接 + `<base href="./">`）。
+- **先确认浏览器真的取到了 manifest**：若装出来的图标是"站点徽标 + 应用名"的色块，说明浏览器没拿到可用 manifest（多半是挂载前缀问题，见上「挂载前缀」）。可用 DevTools → Application → Manifest 看解析结果，或直接 curl `<前缀>/manifest.webmanifest` 与其中的 `icons[].src`。
 - 换图无需重启：图片路由每次请求重新读取。
 
 ## 版本适配

@@ -22,6 +22,13 @@
  *      manifest 文件名时不会静默失效）；
  *   4. 未配置 `icon` 时只打一条 warn，不注册任何路由，不影响启动。
  *
+ * **挂载前缀**：两个路由路径是**后端**路径（反向代理剥掉前缀后看到的）。对外 URL 缺省用
+ * 相对形式（`./manifest.webmanifest` / `./pwa/icon.webp` / `start_url`、`scope` = `./`），
+ * 与 DSH 自带 dist manifest 同款——页面挂在 `<前缀>/` 下时自动带上前缀，因此「根挂载」与
+ * 「反向代理剥前缀（如 DSH 经网关挂在 `/dsh`）」两种部署都成立；写死根绝对路径会让后者的
+ * manifest 与图标都 404，浏览器只能回落到自动生成的图标（本机 2026-10-15 实际踩过）。
+ * 页面不在挂载根时用 `publicBase` 显式给出前缀。
+ *
  * 注意：两个路由都是公开静态路由。浏览器取 manifest 图标时不带凭据，
  * 若加认证门会取不到图标，因此图片本身对能访问该端口的网络可见
  * （与现有的 favicon / dist manifest 同性质）。
@@ -110,10 +117,21 @@ export interface Config {
     type?: string;
     /** manifest icon 的 `purpose`，默认 `any`。 */
     purpose?: string;
-    /** 图片对外 URL 路径，默认 `/pwa/icon<扩展名>`。 */
+    /** 图片在**服务端**的路由路径，默认 `/pwa/icon<扩展名>`（反向代理剥掉前缀后后端看到的路径）。 */
     iconUrl?: string;
-    /** manifest 对外 URL 路径，默认 `/manifest.webmanifest`。 */
+    /** manifest 在**服务端**的路由路径，默认 `/manifest.webmanifest`（同上，不含代理挂载前缀）。 */
     manifestUrl?: string;
+    /**
+     * 浏览器看到的挂载前缀（如 DSH 经反向代理挂在 `/dsh` 下时填 `/dsh`）。
+     *
+     * 缺省（不填）时对外 URL 一律用**相对路径**（`./manifest.webmanifest` / `./pwa/icon.webp` /
+     * `start_url`、`scope` 用 `./`），与 DSH 自带 dist manifest 同款：页面挂在 `<前缀>/` 下时
+     * 相对路径自动带上前缀，因此根挂载与"反向代理剥前缀"两种部署都成立。
+     *
+     * 仅当页面不在挂载根（相对路径不适用）时才需要显式给出，此时对外 URL 用 `<publicBase><路由路径>`
+     * 的绝对形式。必须以 `/` 开头且不带尾斜杠。
+     */
+    publicBase?: string;
     /**
      * 要合并进 manifest 的字段（覆盖默认值）。若其中显式提供了 `icons` 数组，
      * 则完全按它来，不再由 `icon` 生成。
@@ -136,8 +154,13 @@ export declare const inject: string[];
  * @returns 变换后的 index.html。
  */
 export declare function replaceManifestLink(html: string, href: string): string;
-/** 组装要返回的 manifest 对象。 */
-export declare function buildManifest(config: Config, iconEntry: Record<string, string>): Record<string, unknown>;
+/**
+ * 组装要返回的 manifest 对象。
+ * @param config - 插件配置。
+ * @param iconEntry - 由 `icon` 生成的 icon 项。
+ * @param startUrl - `start_url` / `scope` 的默认值。
+ */
+export declare function buildManifest(config: Config, iconEntry: Record<string, string>, startUrl: string): Record<string, unknown>;
 /**
  * 注册 manifest 路由、图片路由、apple-touch-icon 注入与 manifest 链接改写。
  * @param ctx - 携带 webServer 服务的宿主上下文。

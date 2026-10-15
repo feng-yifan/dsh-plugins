@@ -13,6 +13,10 @@ A host-side plugin with no client bundle and no `@deepseek-ai/*` runtime depende
 3. injects `<link rel="apple-touch-icon">` through `webserver/index-inject` (disable with `appleTouchIcon: false`) and rewrites the page's original `<link rel="manifest">` to the plugin route with `webServer.tapIndex` — so a future DSH manifest rename cannot silently disable the plugin;
 4. with no `icon` configured it only logs a warning and registers nothing, leaving startup untouched; a configured `icon` whose file does not exist yet is also only a warning (the routes still register, so the file appearing later is picked up); a `manifestUrl` / `iconUrl` that is not an absolute `/`-prefixed path, or that equals the other one, warns and stays inactive (named routes match the pathname exactly, so a malformed path would silently never match).
 
+**Mount prefix (important)**: `manifestUrl` / `iconUrl` are **backend** paths (what DSH sees after a reverse proxy strips its prefix). Public URLs are emitted **relative** by default — the injected link is `./manifest.webmanifest`, the `apple-touch-icon` is `./pwa/icon.webp`, the manifest's `start_url` / `scope` are `./`, and `icons[].src` is `pwa/icon.webp` resolved against the manifest URL — the same convention as DSH's own dist manifest. That works both at the origin root and behind a prefix-stripping reverse proxy (e.g. DSH mounted at `/dsh`).
+
+> Hard-coded root-absolute URLs (`/manifest.webmanifest`, `start_url: "/"`) 404 under a `/dsh`-style mount: the browser gets no manifest and no icon, so it falls back to a **generated icon** (site badge + app name tile) — hit for real on 2026-10-15. Use `publicBase` only when the page is not served at the mount root.
+
 Chromium's install check requires PNG / SVG / **WebP** at least 144px and **an explicit `sizes` attribute** (`Manifest does not contain a suitable icon - PNG, SVG or WebP format of at least 144px is required, the sizes attribute must be set, and the purpose attribute, if set, must include "any" or "maskable".`). Raster images should therefore declare their real pixel size.
 
 ## Install
@@ -46,8 +50,9 @@ Point the profile's `cordis.patch.yml` at the image (the plugin is inactive with
 | `sizes` | `any` for SVG, `any` + warning otherwise | manifest icon `sizes`; use the real pixel size for raster images |
 | `type` | from extension | `image/*` only (anything else warns and falls back to the extension); `.webp` / `.png` / `.jpg` / `.jpeg` / `.svg` / `.gif` / `.avif` / `.ico` |
 | `purpose` | `any` | manifest icon `purpose` |
-| `iconUrl` | `/pwa/icon<ext>` | public URL path of the image (must start with `/` and differ from `manifestUrl`) |
-| `manifestUrl` | `/manifest.webmanifest` | public URL path of the manifest (must start with `/`) |
+| `iconUrl` | `/pwa/icon<ext>` | **backend** route path of the image (must start with `/` and differ from `manifestUrl`); the public URL is emitted relative by default |
+| `manifestUrl` | `/manifest.webmanifest` | **backend** route path of the manifest (must start with `/`); the public URL is emitted relative by default |
+| `publicBase` | none (relative URLs) | the mount prefix the browser sees (e.g. `/dsh`); needed only when the page is not served at the mount root, in which case public URLs become `<publicBase><route>` |
 | `manifest` | none | extra manifest fields (override defaults); an explicit `icons` array wins |
 | `appleTouchIcon` | `true` | inject `<link rel="apple-touch-icon">` |
 
@@ -56,7 +61,7 @@ Point the profile's `cordis.patch.yml` at the image (the plugin is inactive with
 - **An already installed PWA does not pick up a new icon automatically**: the icon is captured at install time. Uninstall it (or delete the desktop shortcut) and install / add to desktop again.
 - **For iOS, pair the `apple-touch-icon` with a PNG**: Safari's support for WebP behind that link is limited and it usually expects a 180×180 PNG; this plugin serves the configured image as-is and never rescales or transcodes (Chromium uses the manifest, where WebP is fine).
 - **Both routes are public static routes**: browsers fetch manifest icons without credentials, so gating them would break icon loading; the image is therefore visible to anything that can reach the port (same nature as the existing favicon and dist manifest). To narrow that, give `iconUrl` a random token path.
-- **Sub-path deployments need explicit config**: the default `iconUrl` / `manifestUrl` and the manifest `start_url` / `scope` are absolute paths assuming the GUI is served from the origin root; behind a `/dsh/`-style prefix they must be configured, while the dist itself uses `./` links plus `<base href="./">`.
+- **Check that the browser really got the manifest**: an installed icon that looks like a generated tile (site badge + app name) means the browser found no usable manifest — usually a mount-prefix problem (see "Mount prefix" above). Use DevTools → Application → Manifest, or curl `<prefix>/manifest.webmanifest` and its `icons[].src`.
 - Swapping the image needs no restart: the icon route re-reads per request.
 
 ## Version compatibility
