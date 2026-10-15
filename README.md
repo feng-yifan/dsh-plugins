@@ -1,120 +1,60 @@
 # dsh-plugins
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件 monorepo（pnpm workspace）。
+**简体中文** | [English](README.en.md)
 
-## 包
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件集合（pnpm monorepo）。
 
-| 包 | 说明 |
-|---|---|
-| `packages/dsh-vertical-layout` | 竖屏布局优化：电脑竖屏时把右侧栏移到顶部（原独立仓库迁入，历史见原仓库 git）。 |
-| `packages/dsh-font-settings` | **已废弃（2026-10-10）**：DSH 0.2.x 起内置字体设置（`@deepseek-ai/dsh-client-ui-theme` 的 `textFontFamily` / `codeFontFamily` / `terminalFontFamily`，为超集）。npm 全部版本已标记 deprecated；源码留作参考实现，见 [DEPRECATED.md](packages/dsh-font-settings/DEPRECATED.md)，不再参与版本适配。 |
-| `packages/dsh-ask-highlight` | 提问块高亮：已答复的「提问 n/n 已回答」工具块柔和卡片凸显（浅色底 + 圆角）。 |
-| `packages/dsh-pwa-icon` | PWA 图标：把 Web GUI 安装 / 添加到桌面时的应用图标换成配置的图片（接管 manifest 的 `icons`，并注入 `apple-touch-icon`）。需在 profile 里配置 `icon` 才生效。 |
+## 插件
 
-> **废弃标记约定**：包目录里放 `DEPRECATED.md` 即表示该包已废弃——`scripts/check-compat.mjs` 与
-> `scripts/update-peer-ranges.mjs` 会跳过它（不再为它做版本适配），CI 也不再 smoke 它。
+| 插件 | 说明 |
+| --- | --- |
+| [`dsh-vertical-layout`](packages/dsh-vertical-layout) | 竖屏布局优化：电脑竖屏时把右侧文件 / 终端面板移到对话区上方，高度可拖拽调整 |
+| [`dsh-ask-highlight`](packages/dsh-ask-highlight) | 提问块高亮：已答复的「提问 n/n 已回答」工具块用柔和卡片凸显 |
+| [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA 图标：安装 / 添加到桌面时用你指定的图标（包内自带一组，也可换成自己的图、改应用名） |
+| [`dsh-font-settings`](packages/dsh-font-settings) | **已废弃**：DSH 0.2.x 起内置字体设置，源码仅作参考实现 |
+
+每个插件的用法见各自 README（中英双语）。
+
+## 安装
+
+```bash
+dsh plugin --profile web add dsh-vertical-layout
+dsh plugin --profile web add dsh-ask-highlight
+dsh plugin --profile web add dsh-pwa-icon
+```
+
+插件从 npm 安装。需要配置的插件（例如 `dsh-pwa-icon` 换图、改应用名）在 profile 的 `cordis.patch.yml` 里写 `config`，具体字段见各插件 README。
+
+改配置会自动热重载；升级插件版本后界面如果没变化，重启 `dsh web`；纯客户端样式类的插件刷新浏览器即可。
 
 ## 开发
 
 ```bash
-pnpm install          # 安装依赖（typescript 等）
-pnpm run build        # 构建全部包（tsc 宿主 + 客户端 bundle 包装）
-pnpm run verify       # 类型检查全部包
-```
-
-### 类型解析约定
-
-已归档的 `dsh-font-settings` 会 import `@deepseek-ai/dsh-client-*` 的类型，其构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 固定为写它时的 dsh 精确版本（`0.2.1-alpha.1`），因此该包的类型检查是冻结的、不会再随 dsh 升级而变化。
-
-仍在维护的三个包不 import 任何 `@deepseek-ai/*` 运行时依赖（所需宿主类型在文件内结构化声明：`dsh-vertical-layout` / `dsh-ask-highlight` 只用 `webserver/index-inject` 与稳定 DOM 属性选择器，`dsh-pwa-icon` 只用 `webServer.register` / `webServer.tapIndex` / `webserver/index-inject`），因此不需要跟随 dsh 版本升级 devDependencies，也不受 DSH 版本门禁约束。`dsh-pwa-icon` 用到 node 内置模块，故 devDependencies 额外有 `@types/node`——类型依赖，不是运行时依赖。
-
-### 发布到 npm
-
-发布由 GitHub Actions 自动完成（OIDC trusted publishing + provenance，见 `.github/workflows/npm-publish.yml`）。流程：
-
-1. 升级目标包的版本：`pnpm --filter dsh-vertical-layout version x.y.z`（或手改 `packages/<pkg>/package.json`），提交并推送。
-2. 打标签并推送：`git tag dsh-vertical-layout@x.y.z && git push origin dsh-vertical-layout@x.y.z`（标签名 = 包名@版本，须与 package.json 的 version 一致）。
-3. 工作流构建并 `publish --provenance --access public` 该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。
-
-当前纳入自动发布的包：`dsh-vertical-layout`、`dsh-ask-highlight`、`dsh-pwa-icon`（tag 触发与 `workflow_dispatch` 选项均已在工作流里列好，新包照上面三步走即可）。
-
-`dsh-font-settings` 已废弃：`npm-publish.yml` 不再接受它的 tag 触发，也不在手动发布的包列表里。
-
-**npm 上的 deprecated 标记需人工打**：npm 的 Trusted Publishing(OIDC) 只覆盖发布类命令，`npm deprecate` 走 OIDC 会因未认证返回 404（2026-10-10 在 npm 12.2.0 上实测）。到 npmjs.com 包页 Settings → Deprecate，或用有写权限的凭据本地执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
-
-前置（一次性）：在 npmjs.com 为每个包配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`、workflow 文件名 `npm-publish.yml`。
-
-**npm 现行政策（2026-10 观测，影响本流水线）**：
-
-- 新包的 Trusted Publisher 配置属「未验证」，**创建后 48 小时内没有首次成功发布会过期**；过期后重建即可，已成功发布过的配置不受影响。
-- 可信发布的 OIDC token 只接受 `push` / `release` / `workflow_dispatch` 等事件，**拒绝 `pull_request_target` 与 `issue_comment`**——本工作流用 tag push，符合要求。
-- 绕过 2FA 的 granular access token 自 2026-07-31 起不能改包权限/可信发布配置等敏感操作，**约 2027-01 将失去直接发布**，自动化发布应继续走本工作流的 OIDC（也可用 `npm stage publish` 暂存后由维护者 2FA 提升）。
-
-**不要用本地 `pnpm publish` 走浏览器认证**：本机（工作站）代理逐连接更换出口 IP，而 npmjs 的 web 认证会话绑定创建会话时的出口 IP，会导致轮询 403、5 分钟超时（详见 wiki 问题节点「问题-代理逐连接换出口IP致npmjs网页认证超时」）。
-
-### 安装进 profile
-
-```bash
-# 在 dsh-plugins 仓库根执行（profile 名为 web）：
-dsh plugin --profile web add ./packages/dsh-vertical-layout
-dsh plugin --profile web add ./packages/dsh-ask-highlight
-dsh plugin --profile web add ./packages/dsh-pwa-icon
-# dsh-font-settings 已废弃，不要再安装；字体请用 DSH 内置设置（ui-theme）
-```
-
-本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。
-
-`dsh-pwa-icon` 还需在自己的 profile `cordis.patch.yml` 里给出图片路径（不配置则插件不生效，详见该包 README）：
-
-```yaml
-- id: pwa-icon
-  name: dsh-pwa-icon
-  config:
-    icon: /path/to/icon.webp
-    sizes: 400x400
-```
-
-改动后 DSH 内置 `dsh-hmr` 会热重载组合（它监听 profile 的 `cordis.patch.yml` / `package.json`；`root: []` 只关掉插件源码目录监听，故**改插件源码本体**要重建并触发一次重载或重启），刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
-
-## DSH 版本适配
-
-### DSH 怎么判定插件兼容
-
-DSH 在组合 profile 前读取每个插件的 `peerDependencies`，把其中名为 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` 的项与运行中的 dsh 版本比较（预发布版本参与范围匹配）。**未声明这类 peer 的插件不受版本约束**；`engines` 不参与判定。任一 peer 不满足，该插件行会被置为 `disabled` 且模块永不导入；组合包（bundle）不兼容则整体被跳过。安装时同样检查——不兼容的包在 pnpm 运行前就被拒绝。
-
-因此 `@deepseek-ai/dsh-*` 的 peer 范围就是插件的**支持矩阵**：范围覆盖哪个版本，就等于声明支持哪个版本。
-
-### 本地命令
-
-```bash
-pnpm compat                                   # 用本机 dsh 判定全部插件（退出码 1 = 会被拒绝加载）
-pnpm compat -- --runtime 0.2.1-alpha.2 --json # 针对指定版本预检，JSON 输出
-pnpm compat:update -- --runtime 0.3.0-rc.1    # 只打印需要追加的 peer 波带（dry-run）
-pnpm compat:update -- --runtime 0.3.0-rc.1 --write   # 落盘
-# smoke 用真实 dsh 起一次性 profile；用 node 直接调用（CI 同款调用方式，
-# 经 pnpm 转发会先命中仓库内失效的 node_modules/.bin/dsh 垫片）：
+pnpm install
+pnpm run build      # 构建全部包
+pnpm run verify     # 类型检查
+pnpm compat         # 用本机 dsh 检查插件兼容性
+# 真实 dsh 起一次性 profile 做冒烟（需 node 直接调用，勿经 pnpm 转发）
 node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
-node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
-# 需要 config 才生效的插件（宿主侧、无客户端半侧）用 --patch 喂配置：
-node scripts/smoke-plugin.mjs --package dsh-pwa-icon --patch /tmp/pwa-icon.yml --expect-html 'rel="apple-touch-icon"'
 ```
 
-已废弃的包（目录含 `DEPRECATED.md`）在 `compat` / `compat:update` 中显示为 `deprecated — skipped`，不参与适配。
+## 发布
 
-判定函数取自已安装的 dsh（`--dsh`/`$DSH_BIN` 可指定），保证判定与被测运行时同版本。
+发布由 GitHub Actions 自动完成（OIDC 可信发布 + provenance，见 [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml)）：
 
-**放宽范围前必须先验证**：`pnpm verify`（对目标版本的宿主类型编译）+ `pnpm smoke` 都通过，才把新波带写进 peer 范围——否则等于凭空声明支持。
+```bash
+pnpm --filter dsh-vertical-layout version x.y.z     # 1. 升版本
+git commit -am "chore: 版本号提升" && git push       #    提交推送
+git tag dsh-vertical-layout@x.y.z                   # 2. 打 tag：包名@版本，须与 package.json 的 version 一致
+git push origin dsh-vertical-layout@x.y.z           #    推送即触发发布
+```
 
-### 流水线自动适应
+工作流会构建并以 `--provenance --access public` 发布该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。`dsh-font-settings` 已废弃，不在发布列表里。
 
-[`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 每周（及手动 / `repository_dispatch`）对 `latest` 与 `alpha` 两个渠道执行：
+## DSH 版本兼容
 
-1. 解析目标 dsh 版本并装好该版本 CLI；
-2. `pnpm install` + `pnpm -r verify`（类型检查）；
-3. `check-compat` 预检 peer 范围（跳过已废弃的包）；
-4. 若仅范围过期且 2 通过：`update-peer-ranges --write` → 用目标版本跑 smoke → 全绿则开 PR（`chore: support dsh <version>`）；
-5. 任一步失败 → 开 issue 并失败，**不自动改代码**。
+DSH 在组合 profile 前读取插件的 `peerDependencies`，把其中 `@deepseek-ai/dsh*` 的项与运行中的 dsh 版本比对：**未声明这类 peer 的插件不受版本门禁约束**。本仓库在维护的三个插件都不声明（只依赖稳定的宿主接口与 DOM 数据属性），因此与 DSH 版本松耦合；`dsh-font-settings` 的类型检查冻结在写它时的 dsh 版本。
 
-**放宽范围前必须先验证**：`pnpm verify` + `pnpm smoke`（目标版本上真启动）都通过，才把新波带写进 peer 范围——否则等于凭空声明支持。
+每周（及手动）由 [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 在 `latest` / `alpha` 渠道上跑类型检查与真实 smoke：仅在 peer 范围过期且验证通过时自动开 PR，失败则开 issue、不自动改代码。
 
-豁免（`dsh plugin allow-version … --accept-risk`）刻意保留为人工操作：它要求明确接受崩溃/数据损坏风险，插件升级与 dsh 升级都不继承。
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
