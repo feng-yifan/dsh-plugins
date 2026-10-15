@@ -33,7 +33,7 @@ dsh plugin --profile web add dsh-pwa-icon        # install from npm
 
 **How it takes effect**: DSH ships `dsh-hmr` (`dsh-base`'s `hmr` row, enabled by default in compositions that carry a profile context) and watches the profile's `cordis.patch.yml` and `package.json`, so installing the plugin or editing its config **hot-reloads the composition without restarting `dsh web`** (config edits were observed to apply within seconds).
 
-Note, however: **a hot reload only replays config; it does not re-import an already-loaded plugin module** — after upgrading to a new package version you must **restart `dsh web`** (observed on 2026-10-15: config change applied in-process, swapping the module inside `node_modules` did not). Compositions that explicitly disable HMR apply changes on the next restart.
+Note, however: a hot reload is **not guaranteed to re-import an already-loaded plugin module** — config edits always applied within seconds in practice, while swapping the module inside `node_modules` applied immediately in one case and did not in another (observed 2026-10-15 and 2026-10-16). So **after upgrading the package version, check the actual output** (e.g. `curl <prefix>/manifest.webmanifest`); if nothing changed, **restart `dsh web`**. Compositions that explicitly disable HMR apply changes on the next restart.
 
 ## Configuration
 
