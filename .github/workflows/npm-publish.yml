@@ -9,9 +9,13 @@
 # 凭据执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
 #
 # `dsh-font-settings` 已废弃（见 packages/dsh-font-settings/DEPRECATED.md）：不再接受其 tag 发布，
-# 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight
+# 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight、dsh-pwa-icon
 # 配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
 # 见 https://docs.npmjs.com/trusted-publishers
+#
+# npm 现行政策（2026-10 观测）：新包的 Trusted Publisher 配置属「未验证」，创建后 48 小时内
+# 没有首次成功发布会过期，需要重建；`pull_request_target` / `issue_comment` 事件被拒，
+# `push` / `release` / `workflow_dispatch` 可用。详见 wiki 概念节点「概念-DSH插件版本适配」。
 
 name: Publish to npm
 
@@ -20,6 +24,7 @@ on:
     tags:
       - 'dsh-vertical-layout@*'
       - 'dsh-ask-highlight@*'
+      - 'dsh-pwa-icon@*'
   workflow_dispatch:
     inputs:
       package:
@@ -29,6 +34,7 @@ on:
         options:
           - dsh-vertical-layout
           - dsh-ask-highlight
+          - dsh-pwa-icon
 
 permissions:
   contents: read

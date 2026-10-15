@@ -36,11 +36,21 @@ pnpm run verify       # 类型检查全部包
 2. 打标签并推送：`git tag dsh-vertical-layout@x.y.z && git push origin dsh-vertical-layout@x.y.z`（标签名 = 包名@版本，须与 package.json 的 version 一致）。
 3. 工作流构建并 `publish --provenance --access public` 该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。
 
+当前纳入自动发布的包：`dsh-vertical-layout`、`dsh-ask-highlight`、`dsh-pwa-icon`（tag 触发与 `workflow_dispatch` 选项均已在工作流里列好，新包照上面三步走即可）。
+
 `dsh-font-settings` 已废弃：`npm-publish.yml` 不再接受它的 tag 触发，也不在手动发布的包列表里。
 
 **npm 上的 deprecated 标记需人工打**：npm 的 Trusted Publishing(OIDC) 只覆盖发布类命令，`npm deprecate` 走 OIDC 会因未认证返回 404（2026-10-10 在 npm 12.2.0 上实测）。到 npmjs.com 包页 Settings → Deprecate，或用有写权限的凭据本地执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
 
-前置（一次性）：在 npmjs.com 为 `dsh-vertical-layout`、`dsh-ask-highlight` 配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`。
+前置（一次性）：在 npmjs.com 为每个包配置 Trusted Publisher，GitHub 仓库选 `feng-yifan/dsh-plugins`、workflow 文件名 `npm-publish.yml`。
+
+**npm 现行政策（2026-10 观测，影响本流水线）**：
+
+- 新包的 Trusted Publisher 配置属「未验证」，**创建后 48 小时内没有首次成功发布会过期**；过期后重建即可，已成功发布过的配置不受影响。
+- 可信发布的 OIDC token 只接受 `push` / `release` / `workflow_dispatch` 等事件，**拒绝 `pull_request_target` 与 `issue_comment`**——本工作流用 tag push，符合要求。
+- 绕过 2FA 的 granular access token 自 2026-07-31 起不能改包权限/可信发布配置等敏感操作，**约 2027-01 将失去直接发布**，自动化发布应继续走本工作流的 OIDC（也可用 `npm stage publish` 暂存后由维护者 2FA 提升）。
+
+**不要用本地 `pnpm publish` 走浏览器认证**：本机（工作站）代理逐连接更换出口 IP，而 npmjs 的 web 认证会话绑定创建会话时的出口 IP，会导致轮询 403、5 分钟超时（详见 wiki 问题节点「问题-代理逐连接换出口IP致npmjs网页认证超时」）。
 
 ### 安装进 profile
 
