@@ -1,0 +1,11 @@
+# dsh-pwa-icon bundle patch：插入插件行。
+# 图标路径等经 profile 的 cordis.patch.yml 以 config 传入（见 README）：
+#
+#   - id: pwa-icon
+#     name: dsh-pwa-icon
+#     config:
+#       icon: /path/to/icon.webp
+#       sizes: 400x400
+- insert:
+    - id: pwa-icon
+      name: dsh-pwa-icon

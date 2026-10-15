@@ -9,6 +9,7 @@
 | `packages/dsh-vertical-layout` | 竖屏布局优化：电脑竖屏时把右侧栏移到顶部（原独立仓库迁入，历史见原仓库 git）。 |
 | `packages/dsh-font-settings` | **已废弃（2026-10-10）**：DSH 0.2.x 起内置字体设置（`@deepseek-ai/dsh-client-ui-theme` 的 `textFontFamily` / `codeFontFamily` / `terminalFontFamily`，为超集）。npm 全部版本已标记 deprecated；源码留作参考实现，见 [DEPRECATED.md](packages/dsh-font-settings/DEPRECATED.md)，不再参与版本适配。 |
 | `packages/dsh-ask-highlight` | 提问块高亮：已答复的「提问 n/n 已回答」工具块柔和卡片凸显（浅色底 + 圆角）。 |
+| `packages/dsh-pwa-icon` | PWA 图标：把 Web GUI 安装 / 添加到桌面时的应用图标换成配置的图片（接管 manifest 的 `icons`，并注入 `apple-touch-icon`）。需在 profile 里配置 `icon` 才生效。 |
 
 > **废弃标记约定**：包目录里放 `DEPRECATED.md` 即表示该包已废弃——`scripts/check-compat.mjs` 与
 > `scripts/update-peer-ranges.mjs` 会跳过它（不再为它做版本适配），CI 也不再 smoke 它。
@@ -25,7 +26,7 @@ pnpm run verify       # 类型检查全部包
 
 已归档的 `dsh-font-settings` 会 import `@deepseek-ai/dsh-client-*` 的类型，其构建/类型检查所需的 `@deepseek-ai/*` 包以 **devDependencies** 固定为写它时的 dsh 精确版本（`0.2.1-alpha.1`），因此该包的类型检查是冻结的、不会再随 dsh 升级而变化。
 
-仍在维护的两个包不 import 任何 `@deepseek-ai/*` 运行时依赖（所需类型在文件内结构化声明，只用 `webserver/index-inject` 与稳定 DOM 属性选择器），因此不需要跟随 dsh 版本升级 devDependencies，也不受 DSH 版本门禁约束。
+仍在维护的三个包不 import 任何 `@deepseek-ai/*` 运行时依赖（所需宿主类型在文件内结构化声明：`dsh-vertical-layout` / `dsh-ask-highlight` 只用 `webserver/index-inject` 与稳定 DOM 属性选择器，`dsh-pwa-icon` 只用 `webServer.register` / `webServer.tapIndex` / `webserver/index-inject`），因此不需要跟随 dsh 版本升级 devDependencies，也不受 DSH 版本门禁约束。`dsh-pwa-icon` 用到 node 内置模块，故 devDependencies 额外有 `@types/node`——类型依赖，不是运行时依赖。
 
 ### 发布到 npm
 
@@ -47,10 +48,23 @@ pnpm run verify       # 类型检查全部包
 # 在 dsh-plugins 仓库根执行（profile 名为 web）：
 dsh plugin --profile web add ./packages/dsh-vertical-layout
 dsh plugin --profile web add ./packages/dsh-ask-highlight
+dsh plugin --profile web add ./packages/dsh-pwa-icon
 # dsh-font-settings 已废弃，不要再安装；字体请用 DSH 内置设置（ui-theme）
 ```
 
-本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。改动后 HMR 热重载，刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
+本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会各追加一行。
+
+`dsh-pwa-icon` 还需在自己的 profile `cordis.patch.yml` 里给出图片路径（不配置则插件不生效，详见该包 README）：
+
+```yaml
+- id: pwa-icon
+  name: dsh-pwa-icon
+  config:
+    icon: /path/to/icon.webp
+    sizes: 400x400
+```
+
+改动后 DSH 内置 `dsh-hmr` 会热重载组合（它监听 profile 的 `cordis.patch.yml` / `package.json`；`root: []` 只关掉插件源码目录监听，故**改插件源码本体**要重建并触发一次重载或重启），刷新浏览器生效；若客户端 bundle 未被拾取，重启 dsh web。
 
 ## DSH 版本适配
 
@@ -67,7 +81,12 @@ pnpm compat                                   # 用本机 dsh 判定全部插件
 pnpm compat -- --runtime 0.2.1-alpha.2 --json # 针对指定版本预检，JSON 输出
 pnpm compat:update -- --runtime 0.3.0-rc.1    # 只打印需要追加的 peer 波带（dry-run）
 pnpm compat:update -- --runtime 0.3.0-rc.1 --write   # 落盘
-pnpm smoke -- --package dsh-ask-highlight --expect-html dsh-ask-highlight
+# smoke 用真实 dsh 起一次性 profile；用 node 直接调用（CI 同款调用方式，
+# 经 pnpm 转发会先命中仓库内失效的 node_modules/.bin/dsh 垫片）：
+node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
+node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
+# 需要 config 才生效的插件（宿主侧、无客户端半侧）用 --patch 喂配置：
+node scripts/smoke-plugin.mjs --package dsh-pwa-icon --patch /tmp/pwa-icon.yml --expect-html 'rel="apple-touch-icon"'
 ```
 
 已废弃的包（目录含 `DEPRECATED.md`）在 `compat` / `compat:update` 中显示为 `deprecated — skipped`，不参与适配。

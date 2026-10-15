@@ -6,6 +6,7 @@
  *   node scripts/smoke-plugin.mjs --package dsh-font-settings
  *   node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
  *   node scripts/smoke-plugin.mjs --package dsh-font-settings --keep   # 保留临时 DSH_HOME 便于排查
+ *   node scripts/smoke-plugin.mjs --package dsh-pwa-icon --patch /tmp/pwa-icon.yml --expect-html apple-touch-icon
  *
  * 断言（全部通过才退出 0）：
  *   1. `dsh plugin add` 成功——不兼容的插件在 pnpm 运行前就被 dsh 拒绝，这是最硬的信号；
@@ -13,12 +14,14 @@
  *   3. 若插件声明了 `dsh.client`：它出现在首页启动图里（`"id":"<包名>"`）且 client bundle 返回 200；
  *      被预检拒绝的插件不会出现在启动图中；
  *   4. 若给了 `--expect-html <substring>`：首页 HTML 必须包含该标记
- *      （用于只有宿主半侧的插件，如 index-inject 注入的脚本/样式）。
+ *      （用于只有宿主半侧的插件，如 index-inject 注入的脚本/样式）；
+ *   5. 若给了 `--patch <file>`：该 YAML 会追加到一次性 profile 的 patch 层，
+ *      供需要 config 才生效的插件（如 dsh-pwa-icon）在真实 boot 里启用。
  *
  * 不碰用户真实 ~/.dsh：全程用临时 DSH_HOME。
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,7 +31,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 function usage(exitCode) {
   process.stdout.write(
     'usage: node scripts/smoke-plugin.mjs --package <workspace-package-name> [--dsh <bin>] ' +
-      '[--profile web] [--expect-html <substring>] [--keep]\n',
+      '[--profile web] [--expect-html <substring>] [--patch <file>] [--keep]\n',
   )
   process.exit(exitCode)
 }
@@ -38,6 +41,7 @@ let packageName
 let dshBin = 'dsh'
 let profile = 'web'
 let expectHtml
+let patchFile
 let keep = false
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i]
@@ -48,6 +52,14 @@ for (let i = 0; i < args.length; i += 1) {
   else if (arg === '--profile') profile = args[++i]
   else if (arg === '--expect-html') expectHtml = args[++i]
   else if (arg.startsWith('--expect-html=')) expectHtml = arg.slice('--expect-html='.length)
+  else if (arg === '--patch') {
+    patchFile = args[++i]
+    if (patchFile === undefined || patchFile.startsWith('--')) usage(2)
+  }
+  else if (arg.startsWith('--patch=')) {
+    patchFile = arg.slice('--patch='.length)
+    if (patchFile === '') usage(2)
+  }
   else if (arg === '--keep') keep = true
   else if (arg === '-h' || arg === '--help') usage(0)
   else usage(2)
@@ -92,6 +104,29 @@ try {
     throw new Error('install failed')
   }
   process.stdout.write('smoke-plugin: plugin installed into throwaway profile\n')
+
+  // 1b. --patch：把给定 YAML 追加进一次性 profile 的 patch 层。需要 config 才生效的
+  //     插件（宿主侧、无客户端半侧）靠它拿到配置，从而在真实 boot 里被断言。
+  //     新建 profile 的 patch 层是空文档 `[]`，直接追加会变成两个 YAML 文档而解析失败，
+  //     因此先把裸 `[]` 占位行替换掉，再拼接。
+  if (patchFile !== undefined) {
+    const profilePatch = join(home, 'profiles', profile, 'cordis.patch.yml')
+    if (!existsSync(profilePatch)) {
+      fail(`--patch was given but the throwaway profile has no ${profilePatch}`)
+      throw new Error('no profile patch')
+    }
+    if (!existsSync(patchFile)) {
+      fail(`--patch file does not exist: ${patchFile}`)
+      throw new Error('no patch file')
+    }
+    const placeholder = /^\s*\[\s*\]\s*$/m
+    const existing = readFileSync(profilePatch, 'utf8').replace(
+      placeholder,
+      '# (empty-list placeholder superseded by smoke-plugin --patch)',
+    )
+    writeFileSync(profilePatch, `${existing.trimEnd()}\n\n${readFileSync(patchFile, 'utf8').trimEnd()}\n`)
+    process.stdout.write(`smoke-plugin: appended ${patchFile} to the profile patch layer\n`)
+  }
 
   // 2. 启动 web，等它打印带 token 的 URL。
   server = spawn(dshBin, ['web', '--port', '0', '--no-open'], { cwd: repoRoot, env })
