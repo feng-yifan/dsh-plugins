@@ -12,15 +12,19 @@
  *   1. 抢占 manifest 路由（默认 `/manifest.webmanifest`，与 dist 里
  *      `<link rel="manifest">` 指向的 URL 一致，因此直接覆盖即可命中），
  *      返回按 config 生成的 manifest：默认字段沿用当前发布版
- *      （name / short_name / start_url / scope / display），`icons` 替换为
- *      配置的图片——替换而非追加，否则浏览器可能挑回 DSH 的 SVG；
- *   2. 注册图片路由（默认 `/pwa/icon.<ext>`），按请求读取配置的图片文件，
- *      按扩展名给出 content-type；文件缺失返回 404，不改动磁盘；
+ *      （name / short_name / start_url / scope / display），`icons` 换成图标
+ *      （替换而非追加，否则浏览器可能挑回 DSH 的 SVG）——未配置 `icon` 时用
+ *      **随包发布的图标集** `assets/`（规范做法：192 / 512 / maskable 512 /
+ *      1600 各带自己的 `sizes`，浏览器按场景挑最合适的），配置了 `icon` 时
+ *      只用那一个文件；
+ *   2. 注册图标路由（包内集合逐张一条，或单图一条），按请求读取文件并给出
+ *      正确 content-type；文件缺失返回 404，不改动磁盘；
  *   3. 经 `webserver/index-inject` 注入 `<link rel="apple-touch-icon">`
- *      （iOS「添加到主屏幕」），并用 `webServer.tapIndex` 把页面原有的
- *      `<link rel="manifest">` 换成指向本插件路由的那一个（将来 DSH 换
- *      manifest 文件名时不会静默失效）；
- *   4. 未配置 `icon` 时只打一条 warn，不注册任何路由，不影响启动。
+ *      （iOS「添加到主屏幕」；包内集合用随包的 180 PNG，实底避免透明变黑角），
+ *      并用 `webServer.tapIndex` 把页面原有的 `<link rel="manifest">` 换成
+ *      指向本插件路由的那一个（将来 DSH 换 manifest 文件名时不会静默失效）；
+ *   4. 未配置任何东西也能工作：只有 `enabled: false` 才整体关闭；包内资产缺失
+ *      只打 warn（对应路由 404）。
  *
  * **挂载前缀**：两个路由路径是**后端**路径（反向代理剥掉前缀后看到的）。对外 URL 缺省用
  * 相对形式（`./manifest.webmanifest` / `./pwa/icon.webp` / `start_url`、`scope` = `./`），
@@ -41,7 +45,8 @@
  */
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
+import { extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 export const name = 'pwa-icon';
 /**
  * 本插件要用的宿主服务。DSH loader 只认模块导出的 `inject`（patch 行的
@@ -97,6 +102,30 @@ const MIME_BY_EXTENSION = {
     '.avif': 'image/avif',
     '.ico': 'image/x-icon',
 };
+/** 包内资产目录（随 npm 包发布，`files` 含 `assets`）。 */
+const ASSETS_DIR = fileURLToPath(new URL('../assets/', import.meta.url));
+/**
+ * 包内图标集：`icon` 未配置时使用。
+ * 规范做法是一组不同尺寸（浏览器按场景挑最合适的），外加一张 `maskable` 供 Android 自适应图标。
+ */
+const BUNDLED_ICONS = [
+    { file: 'icon-192.png', route: '/pwa/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { file: 'icon-512.png', route: '/pwa/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { file: 'icon-1600.webp', route: '/pwa/icon-1600.webp', sizes: '1600x1600', type: 'image/webp', purpose: 'any' },
+    {
+        file: 'icon-maskable-512.png',
+        route: '/pwa/icon-maskable-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+    },
+];
+/** 包内 apple-touch-icon：iOS 这条路径按 Apple 文档走 PNG，实底避免透明区域变黑角。 */
+const BUNDLED_APPLE_TOUCH_ICON = {
+    file: 'apple-touch-icon-180.png',
+    route: '/pwa/apple-touch-icon.png',
+    type: 'image/png',
+};
 /** 逐个 `<link>` 标签判定 manifest 链接：`data-rel` 这类同后缀属性名不算，`rel="manifest preload"` 这类多 token 也算。 */
 const LINK_TAG = /<link\b[^>]*>/gi;
 /** 属性名前必须是空白，故 `data-rel=` 不会被当作 `rel=`。 */
@@ -139,13 +168,13 @@ export function replaceManifestLink(html, href) {
 /**
  * 组装要返回的 manifest 对象。
  * @param config - 插件配置。
- * @param iconEntry - 由 `icon` 生成的 icon 项。
+ * @param iconEntries - 由 `icon`（单图）或包内图标集生成的 icon 项数组。
  * @param startUrl - `start_url` / `scope` 的默认值。
  */
-export function buildManifest(config, iconEntry, startUrl) {
+export function buildManifest(config, iconEntries, startUrl) {
     const manifest = { ...defaultManifest(startUrl), ...(config.manifest ?? {}) };
     if (!Array.isArray(manifest.icons))
-        manifest.icons = [iconEntry];
+        manifest.icons = iconEntries;
     return manifest;
 }
 /** 一条路由的 method 门（只接受 GET/HEAD）。 */
@@ -180,7 +209,43 @@ function respond(req, res, status, headers, body) {
         res.end(body);
 }
 /**
- * 注册 manifest 路由、图片路由、apple-touch-icon 注入与 manifest 链接改写。
+ * 注册一条"按请求读取本地文件"的公开静态路由（GET/HEAD；文件缺失返回 404）。
+ * @param ctx - 携带 webServer 服务的宿主上下文。
+ * @param route - 服务端路由路径（公开 URL 由 `publicBase` 决定相对还是绝对）。
+ * @param filePath - 要读取的文件（每次请求重读，换图不必重启）。
+ * @param mime - 响应的 content-type。
+ */
+function registerFileRoute(ctx, route, filePath, mime) {
+    ctx.effect(() => ctx.webServer.register({
+        kind: 'exact',
+        path: route,
+        handler: async (req, res) => {
+            if (!methodAllowed(req)) {
+                respond(req, res, 405, { allow: 'GET, HEAD' });
+                return;
+            }
+            let bytes;
+            try {
+                bytes = await readFile(filePath);
+            }
+            catch {
+                respond(req, res, 404, { 'content-type': 'text/plain; charset=utf-8' }, 'icon not found');
+                return;
+            }
+            respond(req, res, 200, {
+                'content-type': mime,
+                'content-length': String(bytes.byteLength),
+                'cache-control': 'no-cache',
+                'x-content-type-options': 'nosniff',
+            }, bytes);
+        },
+    }), `pwa-icon: file route ${route}`);
+}
+/**
+ * 注册 manifest 路由、图标路由（包内图标集或单个文件）、apple-touch-icon 注入与 manifest 链接改写。
+ *
+ * 两种模式：`config.icon` 未配置 → 用随包发布的图标集（192 / 512 / maskable 512 / 1600 + 180 PNG）；
+ * 配置了 → 只用该文件（此时 `sizes` / `type` / `purpose` / `iconUrl` 生效）。
  * @param ctx - 携带 webServer 服务的宿主上下文。
  * @param rawConfig - cordis 行传入的配置。
  */
@@ -188,58 +253,96 @@ export function apply(ctx, rawConfig) {
     const config = rawConfig ?? {};
     if (config.enabled === false)
         return;
-    const icon = typeof config.icon === 'string' ? config.icon.trim() : '';
-    if (icon === '') {
-        ctx.logger?.warn?.('pwa-icon: config.icon is not set — the plugin stays inactive; set the icon file path in the profile patch');
-        return;
-    }
-    const iconFile = resolve(icon);
-    const extension = extname(iconFile).toLowerCase();
-    const declaredType = typeof config.type === 'string' ? config.type.trim() : '';
-    let imageType = MIME_BY_EXTENSION[extension] ?? 'application/octet-stream';
-    if (declaredType !== '') {
-        // 只接受 image/*：type 会原样进 content-type，配置成 text/html 等于把同源公开路由变成 HTML 提供点。
-        if (declaredType.toLowerCase().startsWith('image/'))
-            imageType = declaredType;
-        else
-            ctx.logger?.warn?.(`pwa-icon: config.type ${JSON.stringify(declaredType)} is not an image/* type — falling back to ${imageType}`);
-    }
-    const manifestUrl = routePath(config.manifestUrl, '/manifest.webmanifest', 'manifestUrl', ctx);
-    const iconUrl = routePath(config.iconUrl, `/pwa/icon${extension}`, 'iconUrl', ctx);
-    if (manifestUrl === undefined || iconUrl === undefined)
-        return;
-    if (manifestUrl === iconUrl) {
-        ctx.logger?.warn?.('pwa-icon: config.manifestUrl and config.iconUrl must differ — the plugin stays inactive');
-        return;
-    }
     const publicBase = publicBaseOf(config.publicBase, ctx);
     if (publicBase === undefined)
         return;
     const appleTouchIcon = config.appleTouchIcon !== false;
-    // 对外 URL：缺省相对（页面在 <前缀>/ 下时自动带上前缀，根挂载同样成立），
-    // 只有显式配了 publicBase 才用绝对形式。
-    // - manifestHref / iconHref 是**页面**里的链接（相对页面目录）
-    // - manifestIconSrc 在 manifest 里，按规范相对 **manifest URL** 解析，故不带前导 `./` 也一样到挂载根
-    const manifestHref = publicBase === '' ? `./${relativeFromRoot(manifestUrl)}` : `${publicBase}${manifestUrl}`;
-    const iconHref = publicBase === '' ? `./${relativeFromRoot(iconUrl)}` : `${publicBase}${iconUrl}`;
-    const manifestIconSrc = publicBase === '' ? relativeFromRoot(iconUrl) : `${publicBase}${iconUrl}`;
+    const manifestUrl = routePath(config.manifestUrl, '/manifest.webmanifest', 'manifestUrl', ctx);
+    if (manifestUrl === undefined)
+        return;
+    // 对外 URL 换算：缺省相对（页面在 <前缀>/ 下时自动带上前缀，根挂载同样成立），只有显式配了
+    // publicBase 才用绝对形式。manifest 里的 src 按规范相对 **manifest URL** 解析；页面里的 href
+    // 相对**页面目录**解析——两者在挂载根下落到同一处。
+    const manifestSrc = (route) => (publicBase === '' ? relativeFromRoot(route) : `${publicBase}${route}`);
+    const pageHref = (route) => (publicBase === '' ? `./${relativeFromRoot(route)}` : `${publicBase}${route}`);
+    const manifestHref = pageHref(manifestUrl);
     const startUrl = publicBase === '' ? './' : `${publicBase}/`;
-    if (!existsSync(iconFile)) {
-        // 不阻断注册：文件随后出现即可生效（图片路由每次请求重读），只是把静默失败变成启动期可见。
-        ctx.logger?.warn?.(`pwa-icon: icon file ${iconFile} does not exist yet — the icon route answers 404 until it appears`);
+    const icon = typeof config.icon === 'string' ? config.icon.trim() : '';
+    let iconEntries;
+    let appleTouchHref;
+    if (icon === '') {
+        // ---- 包内图标集模式：npm 安装即自带图标，不依赖任何本机路径 ----
+        if (config.iconUrl !== undefined ||
+            config.sizes !== undefined ||
+            config.type !== undefined ||
+            config.purpose !== undefined) {
+            ctx.logger?.warn?.('pwa-icon: config.iconUrl / sizes / type / purpose take effect only together with config.icon — ' +
+                'using the bundled icon set');
+        }
+        iconEntries = BUNDLED_ICONS.map((entry) => ({
+            src: manifestSrc(entry.route),
+            sizes: entry.sizes,
+            type: entry.type,
+            purpose: entry.purpose,
+        }));
+        for (const entry of BUNDLED_ICONS) {
+            const file = join(ASSETS_DIR, entry.file);
+            if (!existsSync(file)) {
+                ctx.logger?.warn?.(`pwa-icon: bundled asset ${file} is missing — its route answers 404 (broken package?)`);
+            }
+            registerFileRoute(ctx, entry.route, file, entry.type);
+        }
+        if (appleTouchIcon) {
+            const file = join(ASSETS_DIR, BUNDLED_APPLE_TOUCH_ICON.file);
+            if (!existsSync(file)) {
+                ctx.logger?.warn?.(`pwa-icon: bundled asset ${file} is missing — its route answers 404 (broken package?)`);
+            }
+            appleTouchHref = pageHref(BUNDLED_APPLE_TOUCH_ICON.route);
+            registerFileRoute(ctx, BUNDLED_APPLE_TOUCH_ICON.route, file, BUNDLED_APPLE_TOUCH_ICON.type);
+        }
     }
-    let sizes = typeof config.sizes === 'string' && config.sizes.trim() !== '' ? config.sizes.trim() : undefined;
-    if (sizes === undefined && imageType !== 'image/svg+xml') {
-        ctx.logger?.warn?.(`pwa-icon: config.sizes is not set for ${imageType} — Chromium requires the sizes attribute on manifest ` +
-            'icons and may reject the app icon; set sizes to the real pixel size (for example "400x400")');
-        sizes = 'any';
+    else {
+        // ---- 单图模式：只用 config.icon 指定的那一个文件 ----
+        const iconFile = resolve(icon);
+        const extension = extname(iconFile).toLowerCase();
+        const declaredType = typeof config.type === 'string' ? config.type.trim() : '';
+        let imageType = MIME_BY_EXTENSION[extension] ?? 'application/octet-stream';
+        if (declaredType !== '') {
+            // 只接受 image/*：type 会原样进 content-type，配置成 text/html 等于把同源公开路由变成 HTML 提供点。
+            if (declaredType.toLowerCase().startsWith('image/'))
+                imageType = declaredType;
+            else
+                ctx.logger?.warn?.(`pwa-icon: config.type ${JSON.stringify(declaredType)} is not an image/* type — falling back to ${imageType}`);
+        }
+        const iconUrl = routePath(config.iconUrl, `/pwa/icon${extension}`, 'iconUrl', ctx);
+        if (iconUrl === undefined)
+            return;
+        if (manifestUrl === iconUrl) {
+            ctx.logger?.warn?.('pwa-icon: config.manifestUrl and config.iconUrl must differ — the plugin stays inactive');
+            return;
+        }
+        if (!existsSync(iconFile)) {
+            // 不阻断注册：文件随后出现即可生效（图片路由每次请求重读），只是把静默失败变成启动期可见。
+            ctx.logger?.warn?.(`pwa-icon: icon file ${iconFile} does not exist yet — the icon route answers 404 until it appears`);
+        }
+        let sizes = typeof config.sizes === 'string' && config.sizes.trim() !== '' ? config.sizes.trim() : undefined;
+        if (sizes === undefined && imageType !== 'image/svg+xml') {
+            ctx.logger?.warn?.(`pwa-icon: config.sizes is not set for ${imageType} — Chromium requires the sizes attribute on manifest ` +
+                'icons and may reject the app icon; set sizes to the real pixel size (for example "512x512")');
+            sizes = 'any';
+        }
+        iconEntries = [
+            {
+                src: manifestSrc(iconUrl),
+                sizes: sizes ?? 'any',
+                type: imageType,
+                purpose: typeof config.purpose === 'string' && config.purpose.trim() !== '' ? config.purpose.trim() : 'any',
+            },
+        ];
+        registerFileRoute(ctx, iconUrl, iconFile, imageType);
+        if (appleTouchIcon)
+            appleTouchHref = pageHref(iconUrl);
     }
-    const iconEntry = {
-        src: manifestIconSrc,
-        sizes: sizes ?? 'any',
-        type: imageType,
-        purpose: typeof config.purpose === 'string' && config.purpose.trim() !== '' ? config.purpose.trim() : 'any',
-    };
     // manifest 路由：与 dist 里 <link rel="manifest"> 指向的 URL 同名，直接覆盖即可命中。
     ctx.effect(() => ctx.webServer.register({
         kind: 'exact',
@@ -249,7 +352,7 @@ export function apply(ctx, rawConfig) {
                 respond(req, res, 405, { allow: 'GET, HEAD' });
                 return;
             }
-            const body = `${JSON.stringify(buildManifest(config, iconEntry, startUrl), null, 2)}\n`;
+            const body = `${JSON.stringify(buildManifest(config, iconEntries, startUrl), null, 2)}\n`;
             respond(req, res, 200, {
                 'content-type': 'application/manifest+json; charset=utf-8',
                 'content-length': String(Buffer.byteLength(body)),
@@ -258,38 +361,13 @@ export function apply(ctx, rawConfig) {
             }, body);
         },
     }), 'pwa-icon: manifest route');
-    // 图片路由：每次请求重新读取，替换图片无需重启；缺失返回 404。
-    ctx.effect(() => ctx.webServer.register({
-        kind: 'exact',
-        path: iconUrl,
-        handler: async (req, res) => {
-            if (!methodAllowed(req)) {
-                respond(req, res, 405, { allow: 'GET, HEAD' });
-                return;
-            }
-            let bytes;
-            try {
-                bytes = await readFile(iconFile);
-            }
-            catch {
-                respond(req, res, 404, { 'content-type': 'text/plain; charset=utf-8' }, 'icon not found');
-                return;
-            }
-            respond(req, res, 200, {
-                'content-type': imageType,
-                'content-length': String(bytes.byteLength),
-                'cache-control': 'no-cache',
-                'x-content-type-options': 'nosniff',
-            }, bytes);
-        },
-    }), 'pwa-icon: icon route');
     // iOS「添加到主屏幕」用 apple-touch-icon；结构化注入行即可表达。
-    if (appleTouchIcon) {
+    if (appleTouchHref !== undefined) {
         ctx.on('webserver/index-inject', (table) => {
             table.push({
                 kind: 'html',
                 placement: 'head',
-                html: `<link rel="apple-touch-icon" href="${escapeAttribute(iconHref)}">`,
+                html: `<link rel="apple-touch-icon" href="${escapeAttribute(appleTouchHref)}">`,
             });
         });
     }

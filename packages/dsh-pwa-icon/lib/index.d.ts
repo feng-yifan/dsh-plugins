@@ -12,15 +12,19 @@
  *   1. 抢占 manifest 路由（默认 `/manifest.webmanifest`，与 dist 里
  *      `<link rel="manifest">` 指向的 URL 一致，因此直接覆盖即可命中），
  *      返回按 config 生成的 manifest：默认字段沿用当前发布版
- *      （name / short_name / start_url / scope / display），`icons` 替换为
- *      配置的图片——替换而非追加，否则浏览器可能挑回 DSH 的 SVG；
- *   2. 注册图片路由（默认 `/pwa/icon.<ext>`），按请求读取配置的图片文件，
- *      按扩展名给出 content-type；文件缺失返回 404，不改动磁盘；
+ *      （name / short_name / start_url / scope / display），`icons` 换成图标
+ *      （替换而非追加，否则浏览器可能挑回 DSH 的 SVG）——未配置 `icon` 时用
+ *      **随包发布的图标集** `assets/`（规范做法：192 / 512 / maskable 512 /
+ *      1600 各带自己的 `sizes`，浏览器按场景挑最合适的），配置了 `icon` 时
+ *      只用那一个文件；
+ *   2. 注册图标路由（包内集合逐张一条，或单图一条），按请求读取文件并给出
+ *      正确 content-type；文件缺失返回 404，不改动磁盘；
  *   3. 经 `webserver/index-inject` 注入 `<link rel="apple-touch-icon">`
- *      （iOS「添加到主屏幕」），并用 `webServer.tapIndex` 把页面原有的
- *      `<link rel="manifest">` 换成指向本插件路由的那一个（将来 DSH 换
- *      manifest 文件名时不会静默失效）；
- *   4. 未配置 `icon` 时只打一条 warn，不注册任何路由，不影响启动。
+ *      （iOS「添加到主屏幕」；包内集合用随包的 180 PNG，实底避免透明变黑角），
+ *      并用 `webServer.tapIndex` 把页面原有的 `<link rel="manifest">` 换成
+ *      指向本插件路由的那一个（将来 DSH 换 manifest 文件名时不会静默失效）；
+ *   4. 未配置任何东西也能工作：只有 `enabled: false` 才整体关闭；包内资产缺失
+ *      只打 warn（对应路由 404）。
  *
  * **挂载前缀**：两个路由路径是**后端**路径（反向代理剥掉前缀后看到的）。对外 URL 缺省用
  * 相对形式（`./manifest.webmanifest` / `./pwa/icon.webp` / `start_url`、`scope` = `./`），
@@ -91,8 +95,8 @@ interface HostContext {
  * - id: pwa-icon
  *   name: dsh-pwa-icon
  *   config:
- *     icon: /home/viktor/Downloads/400x400bb-75.webp
- *     sizes: 400x400
+ *     icon: /path/to/icon.webp     # 不写则用随包发布的图标集
+ *     sizes: 512x512
  * ```
  *
  * 注意：这里只导出类型、不导出 Schemastery schema——外部插件无法可靠解析
@@ -103,7 +107,10 @@ export interface Config {
     enabled?: boolean;
     /**
      * 图标图片的文件路径（绝对路径；相对路径按 dsh 进程工作目录解析）。
-     * 不配置时插件不生效（只打一条 warn）。
+     *
+     * **不配置时使用随包发布的图标集**（`assets/`：192 / 512 / maskable 512 / 1600 + iOS 用的
+     * 180 PNG），因此 npm 安装即自带图标、无需任何本机路径；配置了就只用这一个文件（此时
+     * `sizes` / `type` / `purpose` / `iconUrl` 才生效）。
      */
     icon?: string;
     /**
@@ -157,12 +164,15 @@ export declare function replaceManifestLink(html: string, href: string): string;
 /**
  * 组装要返回的 manifest 对象。
  * @param config - 插件配置。
- * @param iconEntry - 由 `icon` 生成的 icon 项。
+ * @param iconEntries - 由 `icon`（单图）或包内图标集生成的 icon 项数组。
  * @param startUrl - `start_url` / `scope` 的默认值。
  */
-export declare function buildManifest(config: Config, iconEntry: Record<string, string>, startUrl: string): Record<string, unknown>;
+export declare function buildManifest(config: Config, iconEntries: Record<string, string>[], startUrl: string): Record<string, unknown>;
 /**
- * 注册 manifest 路由、图片路由、apple-touch-icon 注入与 manifest 链接改写。
+ * 注册 manifest 路由、图标路由（包内图标集或单个文件）、apple-touch-icon 注入与 manifest 链接改写。
+ *
+ * 两种模式：`config.icon` 未配置 → 用随包发布的图标集（192 / 512 / maskable 512 / 1600 + 180 PNG）；
+ * 配置了 → 只用该文件（此时 `sizes` / `type` / `purpose` / `iconUrl` 生效）。
  * @param ctx - 携带 webServer 服务的宿主上下文。
  * @param rawConfig - cordis 行传入的配置。
  */

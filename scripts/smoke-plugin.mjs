@@ -7,6 +7,7 @@
  *   node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
  *   node scripts/smoke-plugin.mjs --package dsh-font-settings --keep   # 保留临时 DSH_HOME 便于排查
  *   node scripts/smoke-plugin.mjs --package dsh-pwa-icon --patch /tmp/pwa-icon.yml --expect-html apple-touch-icon
+ *   node scripts/smoke-plugin.mjs --package dsh-pwa-icon --check-manifest-icons
  *
  * 断言（全部通过才退出 0）：
  *   1. `dsh plugin add` 成功——不兼容的插件在 pnpm 运行前就被 dsh 拒绝，这是最硬的信号；
@@ -16,7 +17,10 @@
  *   4. 若给了 `--expect-html <substring>`：首页 HTML 必须包含该标记
  *      （用于只有宿主半侧的插件，如 index-inject 注入的脚本/样式）；
  *   5. 若给了 `--patch <file>`：该 YAML 会追加到一次性 profile 的 patch 层，
- *      供需要 config 才生效的插件（如 dsh-pwa-icon）在真实 boot 里启用。
+ *      供需要 config 才生效的插件（如 dsh-pwa-icon）在真实 boot 里启用；
+ *   6. 若给了 `--check-manifest-icons`：取 `/manifest.webmanifest` 的每条 `icons`，
+ *      逐个请求并校验 HTTP 200、响应 content-type 与声明的 `type` 一致、
+ *      图片实际像素（PNG / WebP / GIF 文件头）与声明的 `sizes` 一致。
  *
  * 不碰用户真实 ~/.dsh：全程用临时 DSH_HOME。
  */
@@ -31,9 +35,37 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 function usage(exitCode) {
   process.stdout.write(
     'usage: node scripts/smoke-plugin.mjs --package <workspace-package-name> [--dsh <bin>] ' +
-      '[--profile web] [--expect-html <substring>] [--patch <file>] [--keep]\n',
+      '[--profile web] [--expect-html <substring>] [--patch <file>] [--check-manifest-icons] [--keep]\n',
   )
   process.exit(exitCode)
+}
+
+/**
+ * 从文件头读出像素尺寸（PNG / WebP / GIF；其它格式返回 undefined）。
+ * @param bytes - 图片字节。
+ * @returns `"<宽>x<高>"` 或 undefined。
+ */
+function imageSize(bytes) {
+  if (bytes.length >= 24 && bytes.toString('ascii', 1, 4) === 'PNG') {
+    return `${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)}`
+  }
+  if (
+    bytes.length >= 30 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    const fourcc = bytes.toString('ascii', 12, 16)
+    if (fourcc === 'VP8X') return `${bytes.readUIntLE(24, 3) + 1}x${bytes.readUIntLE(27, 3) + 1}`
+    if (fourcc === 'VP8L') {
+      const bits = bytes.readUInt32LE(21)
+      return `${(bits & 0x3fff) + 1}x${((bits >> 14) & 0x3fff) + 1}`
+    }
+    if (fourcc === 'VP8 ') return `${bytes.readUInt16LE(26)}x${bytes.readUInt16LE(28)}`
+  }
+  if (bytes.length >= 10 && bytes.toString('ascii', 0, 3) === 'GIF') {
+    return `${bytes.readUInt16LE(6)}x${bytes.readUInt16LE(8)}`
+  }
+  return undefined
 }
 
 const args = process.argv.slice(2)
@@ -42,6 +74,7 @@ let dshBin = 'dsh'
 let profile = 'web'
 let expectHtml
 let patchFile
+let checkManifestIcons = false
 let keep = false
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i]
@@ -60,6 +93,7 @@ for (let i = 0; i < args.length; i += 1) {
     patchFile = arg.slice('--patch='.length)
     if (patchFile === '') usage(2)
   }
+  else if (arg === '--check-manifest-icons') checkManifestIcons = true
   else if (arg === '--keep') keep = true
   else if (arg === '-h' || arg === '--help') usage(0)
   else usage(2)
@@ -210,6 +244,42 @@ try {
       'smoke-plugin: note — plugin declares no client half and no --expect-html was given; ' +
         'only install acceptance + clean boot were asserted\n',
     )
+  }
+
+  // 5c. manifest 图标：逐个取回，校验 HTTP 200、content-type 与声明 type 一致、实际像素与声明 sizes 一致。
+  if (checkManifestIcons) {
+    const manifestUrl = `${origin}/manifest.webmanifest`
+    const manifestResponse = await fetch(manifestUrl)
+    if (!manifestResponse.ok) {
+      fail(`GET /manifest.webmanifest returned ${manifestResponse.status}`)
+    } else {
+      const parsed = await manifestResponse.json()
+      const icons = Array.isArray(parsed.icons) ? parsed.icons : []
+      if (icons.length === 0) fail('manifest declares no icons')
+      for (const icon of icons) {
+        const iconUrl = new URL(String(icon.src), manifestUrl)
+        const response = await fetch(iconUrl)
+        const bytes = Buffer.from(await response.arrayBuffer())
+        const declaredType = String(icon.type ?? '')
+        const actualType = (response.headers.get('content-type') ?? '').split(';')[0].trim()
+        const actualSize = imageSize(bytes)
+        const declaredSizes = String(icon.sizes ?? '')
+        const problems = []
+        if (!response.ok) problems.push(`HTTP ${response.status}`)
+        if (declaredType !== '' && actualType !== declaredType) {
+          problems.push(`served type ${actualType} != declared type ${declaredType}`)
+        }
+        if (declaredSizes !== '' && declaredSizes !== 'any' && actualSize !== undefined) {
+          const first = declaredSizes.split(/\s+/)[0]
+          if (first !== actualSize) problems.push(`actual size ${actualSize} != declared size ${first}`)
+        }
+        const line =
+          `${icon.src} → ${response.status} ${actualType} ${bytes.byteLength}B ` +
+          `sizes=${declaredSizes} actual=${actualSize ?? '?'} purpose=${icon.purpose ?? 'any'}`
+        if (problems.length > 0) fail(`manifest icon problem — ${line} (${problems.join('; ')})`)
+        else process.stdout.write(`smoke-plugin: manifest icon OK — ${line}\n`)
+      }
+    }
   }
 } catch (error) {
   if (!failed) fail(String(error))
