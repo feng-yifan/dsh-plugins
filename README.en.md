@@ -1,5 +1,7 @@
 # dsh-plugins
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 [简体中文](README.md) | **English**
 
 Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (pnpm monorepo).
@@ -56,5 +58,3 @@ The workflow builds and publishes that package with `--provenance --access publi
 Before composing a profile, DSH reads each plugin's `peerDependencies` and compares any `@deepseek-ai/dsh*` entry against the running dsh version: **a plugin that declares no such peer is not constrained**. The three maintained plugins here declare none (they only rely on stable host interfaces and DOM data attributes), so they are loosely coupled to the DSH version; `dsh-font-settings` type-checks against the dsh version it was written for.
 
 Every week (and on demand) [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) runs type checks and a real smoke test on the `latest` / `alpha` channels: it only opens a PR when a peer range is outdated and verification passes, and opens an issue (without changing code) when something fails.
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

@@ -1,5 +1,7 @@
 # dsh-plugins
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 **简体中文** | [English](README.en.md)
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件集合（pnpm monorepo）。
@@ -56,5 +58,3 @@ git push origin dsh-vertical-layout@x.y.z           #    推送即触发发布
 DSH 在组合 profile 前读取插件的 `peerDependencies`，把其中 `@deepseek-ai/dsh*` 的项与运行中的 dsh 版本比对：**未声明这类 peer 的插件不受版本门禁约束**。本仓库在维护的三个插件都不声明（只依赖稳定的宿主接口与 DOM 数据属性），因此与 DSH 版本松耦合；`dsh-font-settings` 的类型检查冻结在写它时的 dsh 版本。
 
 每周（及手动）由 [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 在 `latest` / `alpha` 渠道上跑类型检查与真实 smoke：仅在 peer 范围过期且验证通过时自动开 PR，失败则开 issue、不自动改代码。
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

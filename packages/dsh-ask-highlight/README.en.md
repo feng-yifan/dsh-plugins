@@ -1,5 +1,7 @@
 # dsh-ask-highlight
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 [简体中文](README.md) | **English**
 
 Highlight **answered** ask blocks ("question n/n answered") in the conversation thread as a soft card (light brand-color tint + rounded corners, theme-aware). Pending ask blocks ("waiting for answer") and other tool rows keep their normal look.
@@ -31,5 +33,3 @@ Enabled by default. Turn it off in the profile's `cordis.patch.yml`:
 ## Version compatibility
 
 This plugin declares no `@deepseek-ai/dsh-*` peerDependencies, so the DSH version gate does not constrain it.
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

@@ -1,5 +1,7 @@
 # dsh-vertical-layout
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 **简体中文** | [English](README.en.md)
 
 DSH 竖屏布局优化：**只在电脑屏幕（非手机 / 平板）**上，当浏览器窗口为竖屏时，把三栏重排为「左列导航 + 右上文件 / 终端 + 右下对话」，让对话区在竖屏下拿到完整宽度。
@@ -62,5 +64,3 @@ dsh plugin --profile web add dsh-vertical-layout
 ## License
 
 MIT
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

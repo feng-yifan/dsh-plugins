@@ -1,5 +1,7 @@
 # dsh-vertical-layout
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 [简体中文](README.md) | **English**
 
 Portrait layout for DSH: **on desktop screens only (never phones / tablets)**, when the browser window is in portrait orientation, the three columns are rearranged into "navigation on the left + file / terminal top-right + conversation bottom-right", giving the conversation its full width.
@@ -62,5 +64,3 @@ This plugin declares no `@deepseek-ai/dsh-*` peerDependencies (it only relies on
 ## License
 
 MIT
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

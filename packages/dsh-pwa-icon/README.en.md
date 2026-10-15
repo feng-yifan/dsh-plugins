@@ -1,5 +1,7 @@
 # dsh-pwa-icon
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 [简体中文](README.md) | **English**
 
 Use the picture you want as the app icon when the DSH Web GUI is **installed / added to the desktop** as a PWA (desktop browsers and the iOS Home Screen).
@@ -55,5 +57,3 @@ dsh plugin --profile web add dsh-pwa-icon
 ## Version compatibility
 
 This package declares no `@deepseek-ai/dsh-*` peerDependencies, so the DSH version gate does not constrain it.
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

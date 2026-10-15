@@ -1,5 +1,7 @@
 # dsh-pwa-icon
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 **简体中文** | [English](README.en.md)
 
 把 DSH Web GUI **安装 / 添加到桌面**时的应用图标换成你要的图（桌面浏览器与 iOS 主屏幕都覆盖）。
@@ -55,5 +57,3 @@ dsh plugin --profile web add dsh-pwa-icon
 ## 版本适配
 
 本包不声明任何 `@deepseek-ai/dsh-*` peerDependencies，因此不受 DSH 版本门禁约束。
-
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
