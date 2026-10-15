@@ -29,7 +29,9 @@ dsh plugin --profile web add ./packages/dsh-pwa-icon
 
 A local path installs as a link dependency and appends one line to the profile's `dsh.profile.bundles`.
 
-**How it takes effect**: DSH ships `dsh-hmr` (`dsh-base`'s `hmr` row, enabled by default in compositions that carry a profile context) and watches the profile's `cordis.patch.yml` and `package.json`, so installing the plugin or editing its config **hot-reloads the composition without restarting `dsh web`**; `root: []` only disables the "plugin source directory" watch, so **changing this plugin's own source needs a `pnpm build` plus one reload or a restart**. Compositions that explicitly disable HMR apply changes on the next restart.
+**How it takes effect**: DSH ships `dsh-hmr` (`dsh-base`'s `hmr` row, enabled by default in compositions that carry a profile context) and watches the profile's `cordis.patch.yml` and `package.json`, so installing the plugin or editing its config **hot-reloads the composition without restarting `dsh web`** (config edits were observed to apply within seconds).
+
+Note, however: **a hot reload only replays config; it does not re-import an already-loaded plugin module** — after changing this plugin's source (or the `lib/` inside a link-installed package) you must `pnpm build` **and restart `dsh web`** (observed on 2026-10-15: config change applied in-process, source change did not). Compositions that explicitly disable HMR apply changes on the next restart.
 
 ## Configuration
 

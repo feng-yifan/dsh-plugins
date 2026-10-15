@@ -29,7 +29,9 @@ dsh plugin --profile web add ./packages/dsh-pwa-icon
 
 本地路径安装为 link 依赖；profile 的 `dsh.profile.bundles` 会追加一行。
 
-**生效方式**：DSH 内置 `dsh-hmr`（`dsh-base` 的 `hmr` 行，在带 profile 上下文的组合里默认启用），它监听 profile 的 `cordis.patch.yml` 与 `package.json` → 安装/改配置后**热重载组合，无需重启 `dsh web`**；`root: []` 只是关掉「插件源码目录」监听，因此**改本插件源码后要 `pnpm build` 并触发一次重载或重启**才会生效。若某个组合显式禁用了 HMR，则一律在下次重启生效。
+**生效方式**：DSH 内置 `dsh-hmr`（`dsh-base` 的 `hmr` 行，在带 profile 上下文的组合里默认启用），它监听 profile 的 `cordis.patch.yml` 与 `package.json` → 安装插件、改配置后**热重载组合，无需重启 `dsh web`**（实测配置改动秒级生效）。
+
+但要注意：**热重载只重放配置，不会重新导入已经加载过的插件模块**——改本插件源码（或替换 link 包里的 `lib/`）后必须 `pnpm build` 并**重启 `dsh web`** 才会生效（2026-10-15 实测：同一进程里改配置立即生效、改源码不生效）。若某个组合显式禁用了 HMR，则一律在下次重启生效。
 
 ## 配置
 
