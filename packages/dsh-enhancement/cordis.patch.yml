@@ -1,0 +1,10 @@
+# dsh-enhancement bundle patch：把本插件依赖的两个外部组件连同插件一起插入。
+# 状态保存在当前 profile 目录下 fengyifan-dsh-enhancement/（state.json 0600）。
+# 是否监听网关端口由设置页控制。
+- insert:
+    - id: vertical-layout
+      name: dsh-vertical-layout
+    - id: dsh-web-mobile
+      name: dsh-web-mobile
+    - id: dsh-enhancement
+      name: dsh-enhancement

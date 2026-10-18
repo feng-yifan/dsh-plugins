@@ -12,7 +12,8 @@
 | --- | --- |
 | [`dsh-vertical-layout`](packages/dsh-vertical-layout) | 竖屏布局优化：电脑竖屏时把右侧文件 / 终端面板移到对话区上方，高度可拖拽调整 |
 | [`dsh-ask-highlight`](packages/dsh-ask-highlight) | 提问块高亮：已答复的「提问 n/n 已回答」工具块用柔和卡片凸显 |
-| [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA 图标：安装 / 添加到桌面时用你指定的图标（包内自带一组，也可换成自己的图、改应用名） |
+| [`dsh-pwa-icon`](packages/dsh-pwa-icon) | **已由 `dsh-enhancement` 取代**：PWA 图标/安装能力已并入增强套件；源码保留作参考 |
+| [`dsh-enhancement`](packages/dsh-enhancement) | 远程安全访问网关（密码/HTTPS）+ PWA 安装/图标 + 桌面通知 + PWA Web Push；与 3081 入口共存 |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **已废弃**：DSH 0.2.x 起内置字体设置，源码仅作参考实现 |
 
 每个插件的用法见各自 README（中英双语）。
@@ -22,10 +23,12 @@
 ```bash
 dsh plugin --profile web add dsh-vertical-layout
 dsh plugin --profile web add dsh-ask-highlight
-dsh plugin --profile web add dsh-pwa-icon
+# dsh-pwa-icon 已由 dsh-enhancement 取代；新增强套件本机开发时先用 link: 依赖
+# （见 packages/dsh-enhancement/README.md）
+dsh plugin --profile web add dsh-enhancement
 ```
 
-插件从 npm 安装。需要配置的插件（例如 `dsh-pwa-icon` 换图、改应用名）在 profile 的 `cordis.patch.yml` 里写 `config`，具体字段见各插件 README。
+插件从 npm 安装；本机 link 的插件用本地目录。需要持久配置的插件在 profile 的 `cordis.patch.yml` 里写 `config`（例如 `dsh-enhancement` 的网关/PWA 运行状态存它自己的 `state.json`，不在 profile 里放密码），具体字段见各插件 README。
 
 改配置会自动热重载；升级插件版本后界面如果没变化，重启 `dsh web`；纯客户端样式类的插件刷新浏览器即可。
 

@@ -1,0 +1,80 @@
+{
+  "name": "dsh-enhancement",
+  "version": "0.1.0",
+  "description": "DSH 增强套件：远程安全访问网关（密码/HTTPS）、PWA 安装与图标、桌面通知与 Web Push、设置页。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "assets",
+    "locale",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
+    "verify": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ],
+      "immediately": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/react": "~18.3.12",
+    "react": "^18.2.0",
+    "typescript": "^6.0.3",
+    "@types/node-forge": "^1.3.14",
+    "@types/node-notifier": "^8.0.5",
+    "@types/web-push": "^3.6.4"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/feng-yifan/dsh-plugins",
+    "directory": "packages/dsh-enhancement"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "remote-access",
+    "pwa",
+    "notifications",
+    "web-push",
+    "deepseek"
+  ],
+  "dependencies": {
+    "node-forge": "^1.4.0",
+    "node-notifier": "^11.0.0",
+    "web-push": "^3.6.7",
+    "dsh-web-mobile": "^3.1.0",
+    "dsh-vertical-layout": "^1.1.0"
+  }
+}
