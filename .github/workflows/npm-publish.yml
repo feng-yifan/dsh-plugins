@@ -65,11 +65,12 @@ jobs:
             echo "name=${{ inputs.package }}" >> "$GITHUB_OUTPUT"
           fi
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build
         run: pnpm --filter "${{ steps.pkg.outputs.name }}" run build
       # npx npm@latest guarantees npm >= 11.5.1 (OIDC trusted publishing requirement);
-      # prepare 脚本会在发布前自动重新构建，tarball 以本次构建产物为准。
+      # Build 步骤已生成 lib，publish 跳过 prepare 以免重复构建。
       - name: Publish
         working-directory: packages/${{ steps.pkg.outputs.name }}
-        run: npx -y npm@latest publish --provenance --access public
+        # Build 步骤已产出 lib；跳过 prepare，避免 CI 里重复构建
+        run: npx -y npm@latest publish --provenance --access public --ignore-scripts

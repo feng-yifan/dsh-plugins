@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 .client-build/
 .idea/
+
+# 构建产物由 CI/local build 生成，不提交
+packages/*/lib/
