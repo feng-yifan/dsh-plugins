@@ -190,7 +190,9 @@ const CARD_CSS = `
 .enh-root input[type="checkbox"] { appearance:none; flex:none; width:36px; height:20px; border-radius:999px; background:var(--dsw-alias-border-l2, #d0d5dd); position:relative; cursor:pointer; transition:background .15s; margin:0; }
 .enh-root input[type="checkbox"]::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); transition:transform .15s; }
 .enh-root input[type="checkbox"]:checked { background:var(--dsw-alias-state-business-primary, #4d8dff); }
+
 .enh-root input[type="checkbox"]:checked::after { transform:translateX(16px); }
+.enh-root input[type="checkbox"]:disabled { opacity:.45; cursor:not-allowed; }
 .enh-root input[type="checkbox"]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary, #4d8dff); outline-offset:2px; }
 
 .enh-root .enh-block-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
@@ -574,7 +576,7 @@ function Card(): React.ReactElement {
     await restartGateway()
   }, '网关已重启')
 
-  const copyToClipboard = (text: string, label: string) => {
+  const copyToClipboard = (text: string) => {
     setError(null)
     const fallback = () => {
       const area = document.createElement('textarea')
@@ -585,7 +587,6 @@ function Card(): React.ReactElement {
       area.select()
       try {
         document.execCommand('copy')
-        setNotice(`${label}已复制`)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       } finally {
@@ -593,7 +594,7 @@ function Card(): React.ReactElement {
       }
     }
     if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(text).then(() => setNotice(`${label}已复制`)).catch(fallback)
+      void navigator.clipboard.writeText(text).catch(fallback)
     } else {
       fallback()
     }
@@ -767,7 +768,7 @@ function Card(): React.ReactElement {
       {notice ? <div style={styles.success}>{notice}</div> : null}
 
       <Block
-        order={1}
+        order={2}
         title="网关配置"
         hint="密码网关的监听、访问与会话设置；HTTPS 配置也在本块内，保存时按顺序应用。"
         dirty={gatewayDirty}
@@ -779,14 +780,14 @@ function Card(): React.ReactElement {
       >
         <InlineRow label="DSH 上游">
           <code style={{ ...styles.code, flex: '1 1 260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status.dshAccessUrl || status.dshOrigin}</code>
-          <button style={styles.iconButton} title="复制" aria-label="复制 DSH 上游地址（含 token）" onClick={() => copyToClipboard(status.dshAccessUrl || status.dshOrigin, 'DSH 上游地址')}><CopyIcon /></button>
+          <button style={styles.iconButton} title="复制" aria-label="复制 DSH 上游地址（含 token）" onClick={() => copyToClipboard(status.dshAccessUrl || status.dshOrigin)}><CopyIcon /></button>
           <a style={styles.iconButton} title="打开" aria-label="打开 DSH 上游（含 token）" href={status.dshAccessUrl || status.dshOrigin} target="_blank" rel="noreferrer"><OpenIcon /></a>
         </InlineRow>
         <InlineRow label="网关地址">
           {status.url ? (
             <>
               <code style={{ ...styles.code, flex: '1 1 260px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status.url}</code>
-              <button style={styles.iconButton} title="复制" aria-label="复制网关地址" onClick={() => copyToClipboard(status.url!, '网关地址')}><CopyIcon /></button>
+              <button style={styles.iconButton} title="复制" aria-label="复制网关地址" onClick={() => copyToClipboard(status.url!)}><CopyIcon /></button>
               <a style={styles.iconButton} title="打开" aria-label="打开网关" href={status.url} target="_blank" rel="noreferrer"><OpenIcon /></a>
             </>
           ) : <span style={styles.muted}>未运行；设置密码并启用后生成</span>}
@@ -796,8 +797,8 @@ function Card(): React.ReactElement {
 
         <Row label="启用网关">
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-            <span>{enabled ? '启用' : '停用'}</span>
+            <input type="checkbox" checked={enabled} disabled={!status.passwordSet} onChange={(event) => setEnabled(event.target.checked)} />
+            <span>{!status.passwordSet ? '请先设置密码' : enabled ? '启用' : '停用'}</span>
           </label>
         </Row>
 
@@ -910,7 +911,7 @@ function Card(): React.ReactElement {
       </Block>
 
       <Block
-        order={2}
+        order={1}
         title="访问控制"
         hint={status.passwordSet ? '已设置访问密码；修改后全部网关会话失效。' : '尚未设置密码；设置后才能启用网关。'}
         dirty={accessDirty}

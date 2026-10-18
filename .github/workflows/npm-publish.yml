@@ -9,7 +9,7 @@
 # 凭据执行 `npm deprecate <pkg>@* "<说明>"`（撤销：消息传空串）。
 #
 # `dsh-font-settings` 已废弃（见 packages/dsh-font-settings/DEPRECATED.md）：不再接受其 tag 发布，
-# 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight、dsh-pwa-icon
+# 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight、dsh-pwa-icon、dsh-enhancement
 # 配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
 # 见 https://docs.npmjs.com/trusted-publishers
 #
@@ -25,6 +25,7 @@ on:
       - 'dsh-vertical-layout@*'
       - 'dsh-ask-highlight@*'
       - 'dsh-pwa-icon@*'
+      - 'dsh-enhancement@*'
   workflow_dispatch:
     inputs:
       package:
@@ -35,6 +36,7 @@ on:
           - dsh-vertical-layout
           - dsh-ask-highlight
           - dsh-pwa-icon
+          - dsh-enhancement
 
 permissions:
   contents: read
