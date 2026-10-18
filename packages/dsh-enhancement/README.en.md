@@ -1,89 +1,112 @@
 # dsh-enhancement
 
-DSH enhancement suite: a standalone **password gateway** for DSH Web, plus **PWA install/icons**, **desktop notifications**, and **PWA Web Push**. Useful for exposing DSH on a LAN, adding it to a phone home screen, or reaching it remotely without the `?token=` URL printed by `dsh web`.
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 
-> Status: Phases 1–4 implemented; Phase 5 (docs/deps/cleanup) in progress. The gateway and push are disabled by default.
+[简体中文](README.md) | **English**
+
+A standalone password gateway for DSH Web, plus everything needed to use DSH like an app on your phone: PWA installation, desktop notifications, and mobile push.
+
+Set a password, open the gateway URL, and log in to DSH without carrying around the `?token=` URL printed by `dsh web`. Add DSH to your phone's home screen and get notified when a task finishes or needs your approval—tap the notification to return to the right session.
 
 ## Features
 
-The settings card is organized into expanded **Gateway / Access / PWA / Notifications** sections, each with its own save action, dirty indicator, inline feedback, and DSH `--dsw-alias-*` styling. Gateway settings, HTTPS, and listener options live in one block with a single save.
+| Feature | What it does |
+| --- | --- |
+| Password gateway | Access DSH through a dedicated port and password instead of `?token=`, suitable for LAN or remote use |
+| HTTPS | Upload a certificate, sign with your own CA, or let the plugin create a local CA |
+| PWA | Install DSH on the desktop or phone home screen, with custom app name, theme color, and icons |
+| Desktop notifications | System notifications for task completion, questions, approvals, and background jobs |
+| Mobile push | PWA Web Push notifications on your phone; tap to return to the matching session |
 
-### Secure gateway
+## Password gateway
 
-- Independent listener (default `3088`, disabled by default); configurable interface, port, password and session lifetime.
-- scrypt password hashing; login failures are rate-limited per IP. Normal requests are not globally throttled.
-- DSH-styled dark login page; `HttpOnly; SameSite=Strict` session cookie, `Secure` under HTTPS.
-- Does not need DSH's `?token=`: the plugin reads the persistent signing secret from DSH `credentials` and mints a short-lived `dsh-auth-*` cookie per proxied request.
-- Rewrites upstream Host to the DSH bind address, strips Origin, and enforces same-origin/CSRF itself — no `--trusted-host` change or `dsh-web.service` edit.
-- HTTP + WebSocket reverse proxy; SSE is not buffered.
+- Off by default; listens on port `3088` by default, configurable to another free port.
+- A password must be set before the gateway can be enabled. Only a hash of the password is stored.
+- After login, the gateway keeps its own session; DSH's `?token=` is not needed.
+- Choose which network interface to listen on.
+- Works with normal DSH chat, files, terminal, WebSocket, and live streams.
+- Configurable login session lifetime; changing the password invalidates all gateway sessions.
 
-### HTTPS
+## HTTPS
 
-`off`, `uploaded` (certificate chain + key), `ca` (uploaded CA signs a leaf for the listener), `selfsigned` (plugin-generated local CA; CA certificate downloadable). Private keys stay in `$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/tls/` (current user only). Mobile devices must trust a self-signed/private CA.
+PWA installation, Service Workers, and mobile push require HTTPS (localhost is exempt). Three options are available:
 
-### PWA
+| Option | When to use it |
+| --- | --- |
+| Off (HTTP) | Temporary local/trusted-network use; PWA and push are unavailable |
+| Use an existing certificate | You already have a domain certificate; upload the chain and private key |
+| Sign with a CA | Upload your own CA, or let the plugin generate a local CA and issue a certificate for the current address |
 
-Takes over `/manifest.webmanifest`, icons, `apple-touch-icon`, `/sw.js` and the install prompt; replaces `dsh-pwa-icon`. Default icon set: 192/512 `any`, 512 `maskable`, 1600 WebP, iOS 180. Per-platform slots can be replaced by PNG upload (192, 512, maskable 512, Apple 180). Chromium gets `beforeinstallprompt`; iOS gets a manual “Share → Add to Home Screen” hint. HTTPS is required for installation, Service Worker and push.
+For a self-signed/private CA, install and trust the CA certificate on each device:
 
-### Desktop notifications
+- iOS: Settings → General → VPN & Device Management to install the profile, then General → About → Certificate Trust Settings and enable full trust.
+- Android: Settings → Security → Encryption & credentials → Install a certificate.
 
-Linux uses a small `notify-send --action` shim because `node-notifier@11.0.0`'s Linux backend drops actions/clicks; macOS/Windows use `node-notifier`. Clicking opens `<base>/?dsh-session=<id>`; the browser half calls `uiWorkspace.openSession(id)`. PWA notification clicks focus an existing window or post a message through the Service Worker.
+The certificate must cover the hostname or IP you actually use (SAN), otherwise browsers will still show a certificate error.
 
-Types: task complete, waiting for answer (`ask_user_question`), approval requested, approval denied, subagent finished, goal complete/blocked, background job settled (unawaited jobs only).
+## PWA
 
-### PWA Web Push
+- Takes over DSH's manifest, icons, `apple-touch-icon`, Service Worker, and install prompt.
+- Customize the app name, short name, theme color, and replace desktop/Android/iOS icons separately.
+- Chromium / Edge show an install prompt; iPhone / iPad use Safari's “Share → Add to Home Screen”.
+- Installed apps open without browser chrome; HTTPS is required for installation, Service Worker, and push.
 
-`web-push` + VAPID. Subscription records and the VAPID private key live in `state.json` (current user only). HTTPS is mandatory; iOS/iPadOS 16.4+ requires the app to be installed on the Home Screen, and permission must be requested from a user gesture. The settings card offers subscribe/unsubscribe/test and shows permission/subscription state.
+## Notifications
+
+Supported events, all enabled by default and individually selectable:
+
+- Task completed
+- Waiting for your answer
+- Waiting for approval
+- Approval denied
+- Subagent finished
+- Goal completed or blocked
+- Background job finished (not every command)
+
+Desktop notifications and mobile push share the event selection but can be enabled independently.
+
+Clicking a desktop notification opens the matching session. On Linux and Windows, if DSH is already open, it focuses the existing page and switches to that session; on macOS the system notification opens the link. On Linux, the system notification service must support actions (common desktop environments do); if notifications appear but clicks do nothing, check that `notify-send` and an action-capable notification service are available.
+
+## Mobile push
+
+- Standard Web Push with one subscription per device.
+- Click “Subscribe this device” in settings; the browser asks for notification permission, which must be triggered by your click.
+- iOS / iPadOS 16.4+ is required, and DSH must be added to the Home Screen; regular Safari tabs cannot receive push.
+- Unsubscribe at any time, or send a test push to verify the setup.
 
 ## Install
-
-From npm:
 
 ```bash
 dsh plugin --profile web add dsh-enhancement
 ```
 
-The bundle patch inserts the plugin row and also inserts `dsh-web-mobile` and `dsh-vertical-layout`; do **not** enable those two bundles separately.
+Restart DSH Web after installation. The plugin brings in the mobile and portrait-layout dependencies automatically; do not install or enable them separately.
 
-Local development (link the source):
+## Getting started
 
-```bash
-cd ~/dev/projects/github/fengyifan/dsh-plugins
-pnpm --filter dsh-enhancement build
-cd ~/.dsh/profiles/web
-pnpm add link:../../dev/projects/github/fengyifan/dsh-plugins/packages/dsh-enhancement
-```
+1. Open DSH → Settings → Plugins → `dsh-enhancement`.
+2. Under “Access control”, set a password and save. The gateway enable switch becomes available after a password is set.
+3. Under “Gateway”, choose the listen address and port (default `3088`), enable the gateway, and save.
+4. If you need HTTPS, choose a certificate option in the same section and save. For a self-signed CA, install and trust the CA certificate on your devices.
+5. Open the gateway URL on your phone or another computer and log in with the password; DSH's `?token=` is not required.
+6. To use it as an app, install the PWA in your browser; on iOS use “Share → Add to Home Screen”.
+7. Under “Notifications”, select the events you want and click “Test desktop notification”. For mobile push, enable push and click “Subscribe this device”.
 
-Add `dsh-enhancement` to `dsh.profile.bundles`; mobile/vertical are inserted by its patch.
+## Tips
 
-## Configuration and test isolation
+- Use HTTPS and a strong password before exposing the gateway to the internet.
+- Do not reuse DSH's own port (default `3080`) for the gateway; choose another free port if needed.
+- Self-signed certificates are best for devices you control; use a proper certificate when sharing with others.
+- If you only use DSH locally, leave the gateway off; the normal DSH access path is unaffected.
 
-Runtime state lives at `$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/state.json` (current user only) and `tls/`. Passwords/private keys never go into the profile patch.
+## Limitations
 
-For multi-instance or test profiles, override the state directory:
-
-```bash
-DSH_HOME="$HOME/.local/state/dsh-enhancement-test/home" \
-  dsh --profile enhancement-test --host 10.0.0.2 --port 3090 --no-open
-```
-
-Use a separate gateway port (e.g. 3098) so the production gateway on 3088 is not taken. Host-side code changes then only require restarting the test process, not the DSH instance hosting your current session.
-
-## Known limitations
-
-- Linux click support depends on a notification daemon that implements actions; without `notify-send`/actions, notifications are display-only.
-- Native click opens/focuses a browser tab; exact focus of an existing tab is handled by the PWA Service Worker path.
-- iOS Web Push only works in an installed Home Screen web app on 16.4+; Safari tabs cannot receive push.
-- Self-signed certificates require installing the CA on every device.
-- Real-device iOS/Android acceptance and user-provided icon assets are still pending.
-
-## Development
-
-```bash
-pnpm --filter dsh-enhancement verify
-pnpm --filter dsh-enhancement build
-node scripts/smoke-plugin.mjs --package dsh-enhancement   # from repo root
-```
+- The gateway, PWA, and push are off by default and require setup; the gateway cannot be enabled before a password is set.
+- PWA installation, Service Worker, and Web Push all require HTTPS.
+- iOS push requires 16.4+ and installation on the Home Screen.
+- A self-signed/private CA must be installed and trusted on every device.
+- Linux notification click support depends on the notification service implementing actions.
+- Changing the password invalidates all gateway sessions, so you will need to log in again.
 
 ## License
 

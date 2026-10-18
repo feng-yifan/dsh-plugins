@@ -1,128 +1,113 @@
 # dsh-enhancement
 
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
 **简体中文** | [English](README.en.md)
 
-DSH 增强套件：在 DSH Web 之外提供一个**独立的密码网关**，并整合 **PWA 安装/图标**、**桌面通知**与 **PWA Web Push**。适用于把 DSH 暴露到局域网、手机主屏或远程网络，同时不依赖 DSH 启动时打印的 `?token=`。
+给 DSH Web 加一层独立的密码入口，同时把它变成可以在手机主屏使用、会发通知的 Web 应用。
 
-> 状态：Phase 1–4 已实现，Phase 5（文档/依赖/清理）进行中。当前默认不启用网关、不启用 PWA 推送；先在“设置 → 插件 → dsh-enhancement”里配置。
+设置独立密码后，打开网关地址即可登录 DSH，无需携带 `dsh web` 启动时打印的 `?token=` 地址；装入手机主屏后，任务完成、等待审批等事件会直接推送给你，点通知即可回到对应会话。
 
-## 功能
+## 功能一览
 
-设置页按**网关配置 / 访问控制 / PWA / 通知**分区展开，每个配置块有独立保存按钮、未保存提示和块内保存反馈；表单使用 DSH 的 `--dsw-alias-*` 设计变量。网关配置把监听、访问与 HTTPS 收在同一块，只保留一个保存动作。
-
-### 1. 安全访问网关
-
-- 独立监听地址/端口（默认 `3088`，默认关闭），可配置网卡 IP、密码、会话有效期。
-- 密码只存 scrypt 哈希；登录失败按 IP 节流（可关）。普通请求**不做全局限流**，避免误伤 DSH 的静态资源/WS/SSE。
-- 登录页复用 DSH 深色风格；网关会话 cookie 为 `HttpOnly; SameSite=Strict`，HTTPS 下加 `Secure`。
-- **不需要 DSH `?token=`**：插件从 DSH 的 `credentials` 服务读取持久签名密钥，每次代理请求即时签发一个短时 `dsh-auth-*` cookie 注入上游；浏览器永远看不到它。
-- 上游 Host 改写为 DSH 绑定地址并剥离 Origin；网关自己校验同源 / `Sec-Fetch-Site` / CSRF。这样不需要修改 `dsh-web.service` 的 `--trusted-host`。
-- 支持 HTTP 与 WebSocket（`/api/remote.mux`）反向代理；SSE 不缓冲。
-
-### 2. HTTPS
-
-四种模式：
-
-| 模式 | 说明 |
+| 功能 | 能做什么 |
 | --- | --- |
-| `off` | 纯 HTTP（PWA 安装/推送不可用） |
-| `uploaded` | 上传证书链 + 私钥，直接使用 |
-| `ca` | 上传 CA 证书 + CA 私钥，由插件为当前监听地址签发 leaf |
-| `selfsigned` | 插件生成本地 CA + leaf，并提供 CA 证书下载 |
+| 密码网关 | 用独立端口和密码访问 DSH，无需 `?token=`，适合局域网或远程使用 |
+| HTTPS | 支持上传证书、使用自己的 CA 签发，或由插件自动生成本地 CA |
+| PWA | 把 DSH 添加到桌面/手机主屏，支持自定义应用名、主题色和图标 |
+| 桌面通知 | 任务完成、等待回答、等待审批、后台任务结束等事件弹出系统通知 |
+| 手机推送 | 通过 PWA Web Push 把通知推到手机，点击直接回到对应会话 |
 
-- 私钥写入 `$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/tls/`（仅当前用户可读）。
-- 自签/私有 CA 需要设备安装并信任 CA：iOS 在“设置 → 通用 → VPN 与设备管理”安装描述文件，再到“关于本机 → 证书信任设置”开启完全信任；Android 在“安全 → 加密与凭据 → 安装证书”安装。
-- 上传证书的 SAN 必须覆盖访问地址/IP，否则浏览器会报证书错误。
+## 独立密码网关
 
-### 3. PWA
+- 默认关闭，监听端口默认 `3088`，可在设置中改到其他空闲端口。
+- 必须先设置访问密码，网关的启用开关才可用；密码只保存哈希，不保存明文。
+- 登录后由网关自己的会话维持访问，不需要 DSH 的 `?token=`；网关会替浏览器完成 DSH 认证。
+- 可以选择监听的网卡地址，默认只在你指定的地址上提供服务。
+- 支持 DSH 的正常聊天、文件、终端、WebSocket 和实时流，不只是静态页面。
+- 可以设置登录会话的有效期；修改密码后，所有已登录的网关会话都会失效。
 
-- 接管 `/manifest.webmanifest`、图标路由、`apple-touch-icon`、`/sw.js` 与安装提示；取代 `dsh-pwa-icon`。
-- 默认图标集：192/512 `any`、512 `maskable`、1600 WebP、iOS 180。
-- 桌面/安卓/iOS 没有 OS 专用的 manifest 图标字段；效果通过 `any`（桌面）+ `maskable`（Android 自适应）+ `apple-touch-icon`（iOS，优先级最高）组合实现。
-- Chromium/Edge 支持 `beforeinstallprompt`，页面会显示 DSH 风格的安装浮层；iOS 只能显示“分享 → 添加到主屏幕”的手动指引。
-- PWA 安装、Service Worker、Web Push 都要求 HTTPS（localhost 例外）。
+## HTTPS
 
-### 4. 通知（桌面 + PWA 推送）
+PWA 安装、Service Worker 和手机推送都要求 HTTPS（本机 `localhost` 除外）。设置里提供三种方式：
 
-- 原生通知通道：Linux 调用 `notify-send --action`（因为 `node-notifier@11.0.0` 的 Linux 后端不透传 actions/click），macOS/Windows 使用 `node-notifier`。
-- 点击原生通知时优先通过 SSE 通知已打开的 DSH 页面：页面 `window.focus()` 后调用 `uiWorkspace.openSession(id)`，不再新开标签页；没有已打开页面时才回退到 `<网关或 DSH>/?dsh-session=<id>` 深链。PWA 通知仍由 Service Worker 聚焦已有窗口或打开新窗口。
-- 通知事件（默认开启）：任务完成、等待回答、等待审批、审批被拒绝、子任务结束、目标完成/受阻、后台任务结束（仅未 await 的后台任务，避免每条命令都弹）。事件勾选同时作用于桌面通知和 PWA 推送；两个渠道在设置页独立开关。
-- 生命周期事件来自 DSH 公共事件：`agent/status`、`session/event`（`tool/call` / `approval/*`）、`subagent/end`、`goal/changed`、`jobs.events`。
-- PWA 推送：`web-push` + VAPID；订阅记录与 VAPID 私钥存 `state.json`（仅当前用户可读）。VAPID subject 只是推送服务要求的联系方式，收在高级选项，默认值即可。
-- PWA 推送必须 HTTPS；iOS/iPadOS 16.4+ 且必须“添加到主屏幕”，权限必须由用户点按钮触发。设置页提供“订阅本设备 / 取消订阅 / 发送测试推送”，并显示当前通知权限和订阅数。
+| 方式 | 适用场景 |
+| --- | --- |
+| 关闭（HTTP） | 只在本机或完全可信的网络里临时使用；PWA 和推送不可用 |
+| 使用已有证书 | 已经有域名证书，上传证书链和私钥即可 |
+| 使用 CA 证书自签发 | 上传自己的 CA，或者让插件生成一个本地 CA，再为当前地址签发证书 |
 
+使用自签/私有 CA 时，需要把 CA 证书安装到访问设备并设为信任：
+
+- iOS：设置 → 通用 → VPN 与设备管理 安装描述文件，再到 关于本机 → 证书信任设置 开启完全信任。
+- Android：设置 → 安全 → 加密与凭据 → 安装证书。
+
+上传的证书必须包含你实际访问用的域名或 IP（SAN），否则浏览器仍会提示证书错误。
+
+## PWA
+
+- 接管 DSH 的 manifest、图标、`apple-touch-icon`、Service Worker 和安装提示。
+- 可以自定义应用名称、短名称、主题色，并分别替换桌面/Android/iOS 图标。
+- Chromium / Edge 会显示安装提示；iPhone / iPad 使用 Safari 的“分享 → 添加到主屏幕”。
+- 安装后从主屏启动，不显示浏览器地址栏，使用体验接近原生应用。
+- 只有 HTTPS 下才能安装、注册 Service Worker 和接收推送。
+
+## 通知
+
+支持这些事件，默认全部开启，可以按需勾选：
+
+- 任务完成
+- 等待你回答
+- 等待审批
+- 审批被拒绝
+- 子任务结束
+- 目标完成或受阻
+- 后台任务结束（不会为每条命令都弹）
+
+桌面通知和手机推送共用同一组事件选择，但可以分别关闭其中一个渠道。
+
+点击桌面通知会打开对应会话。Linux 和 Windows 下，如果 DSH 已经打开，会优先切回已有页面并跳转到会话；macOS 使用系统通知的打开链接。Linux 需要系统通知守护支持 action（常见桌面环境都支持）；如果只显示通知、点击没反应，检查系统是否有 `notify-send` 和可用的通知服务。
+
+## 手机推送
+
+- 使用标准 Web Push，每台设备单独订阅。
+- 在设置里点“订阅本设备”，浏览器会请求通知权限；权限必须由你主动点击触发。
+- iOS / iPadOS 需要 16.4 或更高版本，并且必须先把 DSH 添加到主屏幕；Safari 普通标签页收不到推送。
+- 可以随时取消订阅，或发送一条测试推送确认链路正常。
 
 ## 安装
-
-从 npm：
 
 ```bash
 dsh plugin --profile web add dsh-enhancement
 ```
 
-插件行由包内 `cordis.patch.yml` 自动插入；`dsh-web-mobile`、`dsh-vertical-layout` 也由同一个 patch 一并插入，**不要**在 profile 里再重复启用这两个 bundle。
+安装后重启 DSH Web。插件会自动带入手机布局和竖屏布局依赖，不需要再单独安装或启用它们。
 
-本机开发（link 源码）：
+## 开始使用
 
-```bash
-cd ~/dev/projects/github/fengyifan/dsh-plugins
-pnpm --filter dsh-enhancement build
-cd ~/.dsh/profiles/web
-pnpm add link:../../dev/projects/github/fengyifan/dsh-plugins/packages/dsh-enhancement
-```
+1. 打开 DSH → 设置 → 插件 → `dsh-enhancement`。
+2. 在“访问控制”里设置密码并保存。设置密码后，“网关配置”里的启用开关才会变为可用。
+3. 在“网关配置”里选择监听地址和端口（默认 `3088`），打开“启用网关”，保存并应用。
+4. 如果需要 HTTPS，在同一块里选择证书方式并保存；使用自签 CA 时，把 CA 证书安装到手机/电脑并设为信任。
+5. 在手机或另一台电脑上打开网关地址，用刚设置的密码登录，无需 DSH 的 `?token=`。
+6. 需要主屏应用时，在浏览器里安装 PWA；iOS 使用“分享 → 添加到主屏幕”。
+7. 进入“通知”块，确认事件勾选，点“测试桌面通知”；需要手机推送时，打开推送并点“订阅本设备”。
 
-profile 的 `dsh.profile.bundles` 加入 `dsh-enhancement`；mobile/vertical 不用再单独加入。
+## 使用建议
 
-## 配置
+- 把网关暴露到公网前，务必使用 HTTPS 和强密码。
+- 网关端口不要和 DSH 自身端口（默认 `3080`）重复；冲突时换一个空闲端口。
+- 自签证书只适合自己控制的设备；给多人使用建议上传正式证书。
+- 如果只需要在本机用，保持网关关闭即可，DSH 原本的访问方式不受影响。
 
-打开 DSH → 设置 → 插件 → `dsh-enhancement`。运行配置与秘密都在：
+## 限制
 
-```
-$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/state.json   # 仅当前用户可读：密码哈希、网关签名密钥、VAPID、订阅
-$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/tls/         # 仅当前用户可读：证书与私钥
-```
-
-插件行本身只负责加载；`cordis.patch.yml` 不存放密码/私钥。
-
-## 与现有入口共存
-
-- 本插件默认监听 `3088`，与现有 `3081`（Envoy + `dsh-bootstrap`）互不影响。
-- 浏览器原有的 `dsh-auth-*` cookie 在网关代理时会被过滤，只使用插件即时签发的短时 cookie。
-
-## 已知限制
-
-- `node-notifier@11.0.0` 的 Linux 后端不支持点击，所以 Linux 点击由本插件的 `notify-send` shim 实现；如果系统没有 `notify-send` 或通知守护不支持 actions，只能显示、不能点击。
-- 原生通知点击是“打开 URL”，通常会新开/聚焦浏览器标签；精确聚焦已有标签由 PWA Service Worker 通道完成。
-- iOS Web Push 仅 16.4+ 且必须已添加到主屏幕；Safari 标签页不能收推送。
-- 自签证书需要每台设备安装 CA；不想装 CA 就用上传证书模式。
-- PWA 图标上传（桌面/Android/iOS 分别替换）在资产提供后加入；当前使用包内默认图标。
-
-## 开发与隔离测试
-
-```bash
-pnpm --filter dsh-enhancement verify
-pnpm --filter dsh-enhancement build
-```
-
-不要在正在使用的 `web` profile 里反复重启 DSH 做测试。为多实例/测试隔离，本插件支持状态目录覆盖：
-
-```bash
-# 1) 建一个只加载本插件（及 base/web-app）的测试 profile，例如 ~/.dsh/profiles/enhancement-test
-#    package.json 的 dsh.profile.bundles 里放：
-#    @deepseek-ai/dsh-base, @deepseek-ai/dsh-web-app, dsh-enhancement
-# 2) 用独立状态目录启动另一个 DSH 进程（不同端口，避免与 3080/3088 冲突）
-DSH_HOME="$HOME/.local/state/dsh-enhancement-test/home" \
-  dsh --profile enhancement-test --host 10.0.0.2 --port 3090 --no-open
-# 3) 测试网关用另一个端口（例如 3098），不要把生产网关的 3088 抢掉
-```
-
-状态默认放在当前 profile 目录下：`$DSH_HOME/profiles/<profile>/fengyifan-dsh-enhancement/`。`DSH_ENHANCEMENT_STATE_DIR` 仅用于特殊隔离测试，必须是绝对路径。测试 profile 的网关/密码/证书/推送订阅全部落在该目录，不会影响正在使用的 profile。测试环境应使用持久目录（例如 `~/.local/state/dsh-enhancement-test/home`），不要用 `/tmp`。
-
-宿主侧代码变更需要重启**测试进程**（测试进程不托管当前 Agent 会话）；主 `web` profile 只在最终验收时重启一次。
-
-- 宿主半侧：`src/index.ts`、`src/gateway.ts`、`src/control.ts`、`src/tls.ts`、`src/pwa.ts`、`src/notify.ts`、`src/push.ts`。
-- 浏览器半侧：`src/client/index.tsx`，构建为 `lib/client.js`（`scripts/build-client.mjs`）。
-- 测试：`pnpm --filter dsh-enhancement verify`；HTTPS/证书与 PWA 路由可用临时 `DSH_HOME` 做进程内集成测试。
+- 网关、PWA 和推送默认关闭，需要手动配置；未设置密码不能启用网关。
+- PWA 安装、Service Worker 和 Web Push 都需要 HTTPS。
+- iOS 推送要求 16.4+ 且已添加到主屏幕。
+- 自签/私有 CA 需要在每台访问设备上安装并信任。
+- Linux 桌面通知的点击依赖系统通知服务的 action 支持。
+- 修改密码会使所有网关登录会话失效，需要重新登录。
 
 ## License
 

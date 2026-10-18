@@ -146,6 +146,7 @@ export class NativeNotifier {
       '-t', '15000',
       '-u', 'normal',
       '-A', 'default=打开会话',
+      '--wait',
       '--',
       truncate(title, 120),
       truncate(body, 400),

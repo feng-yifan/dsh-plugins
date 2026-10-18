@@ -1,6 +1,6 @@
 {
   "name": "dsh-enhancement",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH 增强套件：远程安全访问网关（密码/HTTPS）、PWA 安装与图标、桌面通知与 Web Push、设置页。",
   "type": "module",
   "main": "./lib/index.js",
