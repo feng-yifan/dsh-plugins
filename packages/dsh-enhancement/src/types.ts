@@ -60,6 +60,18 @@ export interface PwaStatus {
   error: string | null
 }
 
+export interface SessionHeaderStatus {
+  enabled: boolean
+  headerName: string
+  /** 已完成注入补丁的 adapter 数。 */
+  patched: number
+  /** 宿主已注册的 adapter 总数。 */
+  adapterCount: number
+  /** 未挂载的具体原因码。 */
+  reason: 'ok' | 'no-adapters' | 'no-pi-ai-adapter' | 'llm-unavailable'
+  lastError: string | null
+}
+
 export interface PushStatus {
   enabled: boolean
   publicKey: string | null
@@ -101,4 +113,5 @@ export interface StatusPayload {
   pwa: PwaStatus
   notify: NotifyStatus
   push: PushStatus
+  sessionHeader: SessionHeaderStatus
 }

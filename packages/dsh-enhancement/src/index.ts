@@ -13,6 +13,7 @@ import { NotificationEngine } from './notify.js'
 import { PushService } from './push.js'
 import { STATE_DIR, StateStore, configureStateDir, type PluginConfig } from './state.js'
 import { focusHub } from './focus.js'
+import { mountSessionHeader, normalizeHeaderName } from './session-header.js'
 import type { HostContextLike } from './types.js'
 
 export const name = 'dsh-enhancement'
@@ -65,7 +66,13 @@ export function apply(ctx: HostContextLike, config?: PluginConfig): void {
   const push = new PushService(ctx, store)
   const notify = new NotificationEngine(ctx, store, gateway, push)
   notify.start()
-  registerControl(ctx, gateway, store, pwa, notify, push)
+  // 会话请求头注入：让非官方 API 路由（dsh-llm-pi-ai）也能携带 session id。
+  // 每次请求读当前设置，因此在设置页改动即时生效、无需重启。
+  const sessionHeader = mountSessionHeader(ctx, () => ({
+    enabled: store.config.sessionHeaderEnabled,
+    headerName: normalizeHeaderName(store.config.sessionHeaderName),
+  }))
+  registerControl(ctx, gateway, store, pwa, notify, push, sessionHeader)
   pwa.sync()
   ctx.effect?.(() => {
     void gateway.start().catch((error: unknown) => {
@@ -75,6 +82,7 @@ export function apply(ctx: HostContextLike, config?: PluginConfig): void {
       notify.stop()
       pwa.dispose()
       focusHub.stop()
+      sessionHeader.dispose()
       void gateway.stop()
       scheduleUninstallPurge(profileDir, STATE_DIR)
     }

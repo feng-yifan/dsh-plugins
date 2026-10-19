@@ -17,6 +17,7 @@ import type { NotificationEngine } from './notify.js'
 import type { PushService } from './push.js'
 import { caCertificatePem, generateSelfSigned, installUploadedCa, installUploadedCertificate, tlsStatus, useStoredUploadedCa } from './tls.js'
 import type { ConnectionLike, HostContextLike, NetworkInterfaceInfo, StatusPayload } from './types.js'
+import type { SessionHeaderMount } from './session-header.js'
 
 const PREFIX = '/_dsh/enhancement'
 const ICON_KINDS: Record<string, number> = {
@@ -91,7 +92,7 @@ function allowedHost(address: string): boolean {
   return address === '127.0.0.1' || address === '::1' || address === 'localhost'
 }
 
-export function registerControl(ctx: HostContextLike, gateway: Gateway, store: StateStore, pwa: Pwa, notify: NotificationEngine, push: PushService): void {
+export function registerControl(ctx: HostContextLike, gateway: Gateway, store: StateStore, pwa: Pwa, notify: NotificationEngine, push: PushService, sessionHeader?: SessionHeaderMount): void {
   const disposers: Array<() => void> = []
   let restartTimer: NodeJS.Timeout | undefined
   const scheduleRestart = (): void => {
@@ -133,6 +134,7 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     value.push = push.status()
     value.pwa.customIcons = pwa.customIcons()
     value.focusClients = focusHub.size
+    if (sessionHeader !== undefined) value.sessionHeader = sessionHeader.status()
     return value
   }
 
@@ -185,6 +187,13 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     }
     if (typeof body.pushEnabled === 'boolean') patch.pushEnabled = body.pushEnabled
     if (typeof body.pushSubject === 'string' && /^(mailto:|https:\/\/)/i.test(body.pushSubject.trim())) patch.pushSubject = body.pushSubject.trim()
+    if (typeof body.sessionHeaderEnabled === 'boolean') patch.sessionHeaderEnabled = body.sessionHeaderEnabled
+    if (typeof body.sessionHeaderName === 'string') {
+      const name = body.sessionHeaderName.trim()
+      // 头名必须是合法的 HTTP token，否则请求会被上游直接拒绝。
+      if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) return json(res, 400, { error: '请求头名称不合法' })
+      patch.sessionHeaderName = name
+    }
     if (Array.isArray(body.httpsHostnames)) {
       patch.httpsHostnames = body.httpsHostnames
         .filter((item): item is string => typeof item === 'string' && item.trim() !== '')

@@ -17,6 +17,7 @@
 | PWA | 把 DSH 添加到桌面/手机主屏，支持自定义应用名、主题色和图标 |
 | 桌面通知 | 任务完成、等待回答、等待审批、后台任务结束等事件弹出系统通知 |
 | 手机推送 | 通过 PWA Web Push 把通知推到手机，点击直接回到对应会话 |
+| 会话请求头 | 让第三方 API 路由也携带 DSH 的 session id 请求头，便于上游网关按会话关联请求 |
 
 ## 独立密码网关
 
@@ -51,6 +52,29 @@ PWA 安装、Service Worker 和手机推送都要求 HTTPS（本机 `localhost` 
 - Chromium / Edge 会显示安装提示；iPhone / iPad 使用 Safari 的“分享 → 添加到主屏幕”。
 - 安装后从主屏启动，不显示浏览器地址栏，使用体验接近原生应用。
 - 只有 HTTPS 下才能安装、注册 Service Worker 和接收推送。
+
+## 会话请求头
+
+DSH 只在直连官方 DeepSeek API 时发送 `x-deepseek-harness-session-id`；走 OpenAI 兼容网关（`llm-pi-ai`）的第三方路由不会携带任何会话标识。启用本功能后，插件会把当前会话的 session id 注入成请求头，让上游网关也能按会话关联请求。
+
+- 默认**关闭**，默认头名与 DeepSeek 官方一致：`x-deepseek-harness-session-id`。
+- 头名可改成上游网关约定的其它名称；值始终是 DSH 的原始 session id。
+- 只作用于第三方 API adapter（`llm-pi-ai`）；官方 DeepSeek 路由本来就带该头，不受影响。
+- 保存后下一次模型请求即生效，不需要重启 DSH。
+- 上游若已存在同名头，插件的注入不会覆盖它。
+
+> 实现说明：注入点在第三方 adapter 的 `streamWithSnapshot` 原型方法上（DSH 在该方法内重建 pi-ai 的 options，`llm/stream` 层改不动请求头）。因此本功能依赖宿主内部结构，宿主版本结构变化时会自动旁路并记录原因，不会阻断请求。
+
+### 为什么显示「尚未挂载」
+
+`dsh-base` 以**休眠态**挂载 `llm-pi-ai`：没有配置任何 provider 路由时它不会注册 adapter（`routes.length === 0` 直接返回），此时插件无处注入。这是正常状态，不是故障。设置页按原因区分：
+
+| 提示 | 含义 | 处理 |
+| --- | --- | --- |
+| 已挂载到 N 个第三方 API adapter | 正常工作 | — |
+| 当前没有已注册的第三方模型路由 | 尚未配置 OpenAI 兼容 provider | 到「设置 → 模型」添加，或在本 profile 的 `cordis.patch.yml` 写 `llm-pi-ai` 的 `providers` |
+| 已注册 N 个 adapter，但没有一个是第三方 API adapter | 只有官方 DeepSeek 路由 | 同上：需要添加第三方 provider |
+| 宿主 llm 服务不可用或结构已变化 | 版本漂移 | 插件已旁路，不影响正常请求 |
 
 ## 通知
 

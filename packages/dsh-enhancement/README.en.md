@@ -17,6 +17,7 @@ Set a password, open the gateway URL, and log in to DSH without carrying around 
 | PWA | Install DSH on the desktop or phone home screen, with custom app name, theme color, and icons |
 | Desktop notifications | System notifications for task completion, questions, approvals, and background jobs |
 | Mobile push | PWA Web Push notifications on your phone; tap to return to the matching session |
+| Session header | Send a DSH session-id request header on third-party API routes too, so a gateway can correlate requests by session |
 
 ## Password gateway
 
@@ -50,6 +51,29 @@ The certificate must cover the hostname or IP you actually use (SAN), otherwise 
 - Customize the app name, short name, theme color, and replace desktop/Android/iOS icons separately.
 - Chromium / Edge show an install prompt; iPhone / iPad use Safari's “Share → Add to Home Screen”.
 - Installed apps open without browser chrome; HTTPS is required for installation, Service Worker, and push.
+
+## Session header
+
+DSH only sends `x-deepseek-harness-session-id` when talking to the official DeepSeek API; third-party routes through OpenAI-compatible gateways (`llm-pi-ai`) carry no session identifier at all. With this feature on, the plugin injects the current session id as a request header so your gateway can correlate requests by session.
+
+- **Off by default**; the default header name matches the official DeepSeek one: `x-deepseek-harness-session-id`.
+- The header name is configurable for gateways with their own convention; the value is always DSH's raw session id.
+- Applies only to third-party API adapters (`llm-pi-ai`); official DeepSeek routes already send it and are untouched.
+- Takes effect on the next model request after saving — no restart needed.
+- An existing header of the same name set upstream is never overwritten.
+
+> Implementation note: injection happens on the third-party adapter's `streamWithSnapshot` prototype method, because DSH rebuilds the pi-ai options inside it — the `llm/stream` layer cannot change request headers. The feature therefore depends on host internals; if the host shape changes, it bypasses itself and records the reason instead of blocking requests.
+
+### Why it says "not mounted yet"
+
+`dsh-base` mounts `llm-pi-ai` in a **dormant** state: with no provider routes configured it never registers an adapter (`routes.length === 0` returns early), so there is nothing to inject into. That is a normal state, not a failure. The settings page distinguishes the causes:
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| Mounted on N third-party API adapters | Working | — |
+| No third-party model routes registered | No OpenAI-compatible provider configured yet | Add one under Settings → Models, or declare `providers` for `llm-pi-ai` in this profile's `cordis.patch.yml` |
+| N adapters registered, none is a third-party API adapter | Only official DeepSeek routes | Same as above: add a third-party provider |
+| Host llm service unavailable or reshaped | Version drift | Plugin has bypassed itself; requests are unaffected |
 
 ## Notifications
 

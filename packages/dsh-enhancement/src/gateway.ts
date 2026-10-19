@@ -352,6 +352,15 @@ export class Gateway {
         goal: config.notifyGoal,
         jobs: config.notifyJobs,
       },
+      // 实际注入状态由 control 层用 session-header 的运行时读数覆盖。
+      sessionHeader: {
+        enabled: config.sessionHeaderEnabled,
+        headerName: config.sessionHeaderName,
+        patched: 0,
+        adapterCount: 0,
+        reason: 'no-adapters',
+        lastError: null,
+      },
     }
   }
 

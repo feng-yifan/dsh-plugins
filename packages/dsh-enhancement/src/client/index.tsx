@@ -34,6 +34,15 @@ interface TlsStatus {
   uploadedCaInfo: TlsCertInfo | null
 }
 
+interface SessionHeaderStatus {
+  enabled: boolean
+  headerName: string
+  patched: number
+  adapterCount: number
+  reason: 'ok' | 'no-adapters' | 'no-pi-ai-adapter' | 'llm-unavailable'
+  lastError: string | null
+}
+
 interface PushStatus {
   enabled: boolean
   publicKey: string | null
@@ -85,6 +94,7 @@ interface Status {
   pwa: PwaStatus
   notify: NotifyStatus
   push: PushStatus
+  sessionHeader: SessionHeaderStatus
 }
 
 interface ClientContext {
@@ -379,6 +389,8 @@ function Card(): React.ReactElement {
   const [pushCount, setPushCount] = useState(0)
   const [deviceSubscribed, setDeviceSubscribed] = useState(false)
   const [customIcons, setCustomIcons] = useState<string[]>([])
+  const [sessionHeaderEnabled, setSessionHeaderEnabled] = useState(false)
+  const [sessionHeaderName, setSessionHeaderName] = useState('x-deepseek-harness-session-id')
 
   const applyStatus = useCallback((next: Status) => {
     setStatus(next)
@@ -409,6 +421,8 @@ function Card(): React.ReactElement {
     setPushPublicKey(next.push?.publicKey ?? null)
     setPushCount(next.push?.subscriptions ?? 0)
     setCustomIcons(next.pwa?.customIcons ?? [])
+    setSessionHeaderEnabled(next.sessionHeader?.enabled ?? false)
+    setSessionHeaderName(next.sessionHeader?.headerName ?? 'x-deepseek-harness-session-id')
     setHttpsChoice(next.https?.mode === 'uploaded' ? 'uploaded' : next.https?.mode === 'off' ? 'off' : 'selfsigned')
     setCaSource(next.https?.mode === 'ca' ? 'uploaded' : 'generated')
   }, [])
@@ -480,6 +494,14 @@ function Card(): React.ReactElement {
     const next = await api<Status>('/config', { method: 'POST', body: JSON.stringify(fields) })
     applyStatus(next)
   }, success)
+
+  const saveSessionHeader = () => runBlock('sessionHeader', async () => {
+    const next = await api<Status>('/config', {
+      method: 'POST',
+      body: JSON.stringify({ sessionHeaderEnabled, sessionHeaderName }),
+    })
+    applyStatus(next)
+  }, '会话请求头配置已保存，下一次模型请求即生效。')
 
   const saveGateway = () => runBlock('gateway', async () => {
     let next = await api<Status>('/config', {
@@ -746,9 +768,31 @@ function Card(): React.ReactElement {
     notifyJobs !== status.notify.jobs ||
     pushEnabled !== status.push.enabled ||
     pushSubject !== status.push.subject
+  const sessionHeaderDirty =
+    sessionHeaderEnabled !== status.sessionHeader.enabled ||
+    sessionHeaderName !== status.sessionHeader.headerName
   const accessDirty = newPassword.length > 0 || confirmPassword.length > 0
 
   const iconUrl = (kind: string): string => `/pwa/enhancement/${kind}?v=${iconVersion}`
+
+  /**
+   * 会话请求头的挂载说明。
+   * 「没配第三方模型」是正常状态而非故障，必须与真正的结构异常区分开。
+   */
+  const sessionHeaderSummary = (errorStyle = false): string => {
+    const header = status.sessionHeader
+    if (header.patched > 0) {
+      return `已挂载到 ${header.patched} 个第三方 API adapter；改动即时生效，无需重启。`
+    }
+    if (header.reason === 'no-adapters') {
+      return '当前没有已注册的第三方模型路由，因此暂时无处注入。在「设置 → 模型」添加一个 OpenAI 兼容 provider（或在本 profile 的 cordis.patch.yml 配置 llm-pi-ai 路由）后会自动挂载；官方 DeepSeek 路由本来就自带该头，不需要它。'
+    }
+    if (header.reason === 'no-pi-ai-adapter') {
+      return `已注册 ${header.adapterCount} 个 adapter，但没有一个是第三方 API adapter（llm-pi-ai），因此未挂载。`
+    }
+    if (errorStyle) return '宿主 llm 服务不可用或结构已变化，注入已旁路，不会影响正常请求。'
+    return '宿主 llm 服务不可用或结构已变化，注入暂时旁路。'
+  }
 
   return (
     <div className="enh-root" style={styles.wrap}>
@@ -1082,6 +1126,43 @@ function Card(): React.ReactElement {
         <div style={styles.code}>{status.statePath}</div>
         <div style={styles.muted}>密码只存 scrypt 哈希，DSH 签名密钥不会写入这里。</div>
       </div>
+      <Block
+        order={5}
+        title="会话请求头"
+        hint="让非官方 API 路由（如 OpenAI 兼容网关）也携带 DSH 的 session id。官方 DeepSeek API 本来就带，不受影响。"
+        dirty={sessionHeaderDirty}
+        busy={busy}
+        saveLabel="保存会话请求头"
+        onSave={saveSessionHeader}
+        status={blockStatus.sessionHeader}
+      >
+        <Row label="启用注入">
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={sessionHeaderEnabled} onChange={(event) => setSessionHeaderEnabled(event.target.checked)} />
+            <span>{sessionHeaderEnabled ? '启用' : '停用'}</span>
+          </label>
+        </Row>
+        <Row label="请求头名称">
+          <input
+            value={sessionHeaderName}
+            onChange={(event) => setSessionHeaderName(event.target.value)}
+            placeholder="x-deepseek-harness-session-id"
+            style={{ ...styles.input, width: '100%', maxWidth: 360 }}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+        </Row>
+        <div style={styles.muted}>
+          默认值与 DeepSeek 官方发送的头名一致（<code>x-deepseek-harness-session-id</code>），也可改成上游网关约定的其它名称。
+        </div>
+        {status.sessionHeader.reason === 'llm-unavailable' ? (
+          <div style={styles.error}>{sessionHeaderSummary(true)}</div>
+        ) : (
+          <div style={styles.muted}>{sessionHeaderSummary()}</div>
+        )}
+      </Block>
+
     </div>
   )
 }

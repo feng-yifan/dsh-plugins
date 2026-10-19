@@ -10,6 +10,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { DEFAULT_SESSION_HEADER_NAME } from './session-header.js'
 
 export type HttpsMode = 'off' | 'uploaded' | 'ca' | 'selfsigned'
 
@@ -37,6 +38,8 @@ export interface GatewayConfig {
   notifyJobs: boolean
   pushEnabled: boolean
   pushSubject: string
+  sessionHeaderEnabled: boolean
+  sessionHeaderName: string
 }
 
 export interface PasswordRecord {
@@ -205,6 +208,8 @@ export function defaultConfig(host: string): GatewayConfig {
     notifyJobs: true,
     pushEnabled: false,
     pushSubject: 'mailto:admin@example.com',
+    sessionHeaderEnabled: false,
+    sessionHeaderName: DEFAULT_SESSION_HEADER_NAME,
   }
 }
 
@@ -232,6 +237,10 @@ export function normalizeConfig(raw: Partial<GatewayConfig> | undefined, host: s
   }
   cfg.pushEnabled = cfg.pushEnabled === true
   cfg.pushSubject = typeof cfg.pushSubject === 'string' && cfg.pushSubject.trim() ? cfg.pushSubject.trim() : base.pushSubject
+  cfg.sessionHeaderEnabled = cfg.sessionHeaderEnabled === true
+  cfg.sessionHeaderName = typeof cfg.sessionHeaderName === 'string' && /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(cfg.sessionHeaderName.trim())
+    ? cfg.sessionHeaderName.trim()
+    : base.sessionHeaderName
   return cfg
 }
 
