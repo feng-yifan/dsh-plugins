@@ -11,7 +11,7 @@
 | 插件 | 说明 |
 | --- | --- |
 | [`dsh-vertical-layout`](packages/dsh-vertical-layout) | 竖屏布局优化：电脑竖屏时把右侧文件 / 终端面板移到对话区上方，高度可拖拽调整 |
-| [`dsh-ask-highlight`](packages/dsh-ask-highlight) | 提问块高亮：已答复的「提问 n/n 已回答」工具块用柔和卡片凸显 |
+| [`dsh-ask-highlight`](packages/dsh-ask-highlight) | 提问块高亮：已答复的「提问 n/n 已回答」工具块用柔和卡片凸显；可让提问块默认展开，设置页可配 |
 | [`dsh-pwa-icon`](packages/dsh-pwa-icon) | **已由 `dsh-enhancement` 取代**：PWA 图标/安装能力已并入增强套件；源码保留作参考 |
 | [`dsh-enhancement`](packages/dsh-enhancement) | 远程安全访问网关（密码/HTTPS）+ PWA 安装/图标 + 桌面通知 + PWA Web Push；与 3081 入口共存 |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **已废弃**：DSH 0.2.x 起内置字体设置，源码仅作参考实现 |

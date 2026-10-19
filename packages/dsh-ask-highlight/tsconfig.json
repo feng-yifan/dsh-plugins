@@ -12,7 +12,9 @@
     "rootDir": "src",
     "skipLibCheck": true,
     "noEmitOnError": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/client"]
 }

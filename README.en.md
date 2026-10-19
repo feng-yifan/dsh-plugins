@@ -11,7 +11,7 @@ Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 
 | Plugin | What it does |
 | --- | --- |
 | [`dsh-vertical-layout`](packages/dsh-vertical-layout) | Portrait layout: on a portrait desktop window, moves the file / terminal panel above the conversation; its height is draggable |
-| [`dsh-ask-highlight`](packages/dsh-ask-highlight) | Ask-block highlight: answered "question n/n answered" tool rows get a soft card look |
+| [`dsh-ask-highlight`](packages/dsh-ask-highlight) | Ask-block highlight: answered "question n/n answered" tool rows get a soft card look; optional expand-by-default, configurable in Settings |
 | [`dsh-pwa-icon`](packages/dsh-pwa-icon) | **Superseded by `dsh-enhancement`**: PWA icon/install capability is now part of the enhancement suite; source kept for reference |
 | [`dsh-enhancement`](packages/dsh-enhancement) | Remote-access password gateway (HTTPS/password) + PWA install/icons + desktop notifications + PWA Web Push; coexists with the 3081 entry |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **Deprecated**: DSH 0.2.x has built-in font settings; the source is kept as a reference implementation |

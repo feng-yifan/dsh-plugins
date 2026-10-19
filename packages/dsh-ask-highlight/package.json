@@ -1,7 +1,7 @@
 {
   "name": "dsh-ask-highlight",
-  "version": "1.0.0",
-  "description": "DSH 提问块高亮：把对话里已答复的「提问 n/n 已回答」工具块用柔和卡片样式凸显（浅品牌色底 + 圆角）。",
+  "version": "1.1.0",
+  "description": "DSH 提问块高亮：把对话里已答复的「提问 n/n 已回答」工具块用柔和卡片样式凸显（浅品牌色底 + 圆角），可让提问块默认展开，并在插件设置页里配置。",
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -10,6 +10,10 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
@@ -22,13 +26,20 @@
     "README.en.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "verify": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
+    "verify": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "prepare": "npm run build"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ],
+      "immediately": true
     }
   },
   "keywords": [
@@ -45,6 +56,9 @@
     "directory": "packages/dsh-ask-highlight"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "~18.3.12",
+    "react": "^18.2.0",
     "typescript": "^6.0.3"
   },
   "engines": {
