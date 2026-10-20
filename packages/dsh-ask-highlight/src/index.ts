@@ -137,47 +137,39 @@ const HIGHLIGHT_CSS = `/* dsh-ask-highlight: 已答复的提问块（柔和卡�
  *  - 整行可点时（ToolRow 路径）披露行带 `data-expandable` 且带 `aria-expanded`；
  *  - 只有前置按钮可点时（QuestionToolRow 路径，提问行带「面板」按钮），
  *    披露行内是 `button[aria-expanded]`；
- *  - 行的稳定身份是祖先上的 `data-chat-call-id`（ToolCallTree 输出）。
+ *  - 行的稳定身份是祖先上的 `data-chat-call-id`（ToolCallTree 输出），但本脚本
+ *    刻意**不用它记账**（原因见下）。
  *
- * 已处理的块按 callId 记账（拿不到 callId 时退回元素本身），所以用户手动
- * 收起后不会被再次展开，即便 React 重渲染换了节点。展开放在定时器里做，
- * 避免在 React 提交阶段同步 setState。
+ * 已处理的块按 **DOM 节点**记账（`WeakSet`），所以：
+ *  - 用户手动收起后不会被再次展开——流式输出、滚动等后续 DOM 变更会让脚本反复
+ *    sweep，若不记账，用户永远收不起某个块；
+ *  - 切换会话后重新展开——DSH 切换会话时卸载并重建整棵子树，节点全新但 callId
+ *    不变；按 callId 记账会把它们误判成「已处理」，这正是 1.1.0 的 bug。
+ * 记账集合是页面内存里的 `WeakSet`，不落盘、不写配置，刷新页面即清空；节点被
+ * 回收时其条目自动消失。
+ *
+ * 展开放在定时器里做，避免在 React 提交阶段同步 setState。
  */
 const EXPAND_SCRIPT = `/* dsh-ask-highlight: 提问块默认展开 */
 (() => {
   if (window.__dshAskHighlightExpand) return
   window.__dshAskHighlightExpand = true
-  var handled = new Set()
-  var fallback = new WeakSet()
+  var done = new WeakSet()
   var ROOT = '[data-tool="ask_user_question"]'
-  var key = (root) => {
-    var holder = root.closest('[data-chat-call-id]')
-    return holder === null ? null : holder.getAttribute('data-chat-call-id')
-  }
-  var seen = (root) => {
-    var id = key(root)
-    if (id === null) return fallback.has(root)
-    return handled.has(id)
-  }
-  var remember = (root) => {
-    var id = key(root)
-    if (id === null) fallback.add(root)
-    else handled.add(id)
-  }
   var expand = (root) => {
-    if (seen(root)) return
+    if (done.has(root)) return
     var row = root.querySelector('[data-disclosure-row]')
     if (row === null) return
     var header = row.parentElement
     var open = root.querySelector('[data-open]') !== null
       || (header !== null && header.hasAttribute('data-disclosure-header') && header.nextElementSibling !== null)
     if (open) {
-      remember(root)
+      done.add(root)
       return
     }
     var control = row.hasAttribute('data-expandable') ? row : row.querySelector('button[aria-expanded]')
     if (control === null) return
-    remember(root)
+    done.add(root)
     control.click()
   }
   var visit = (node) => {

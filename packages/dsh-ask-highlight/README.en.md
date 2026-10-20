@@ -45,7 +45,7 @@ The same two fields may appear in `cordis.patch.yml`, but that file only **seeds
 - Colors come from the DSH theme token `--dsw-alias-state-business-primary`, so light and dark themes adapt automatically.
 - The expanded card uses one 8px padding on all four sides: the content card's own `margin: 4px 0 4px 4px` is neutralized and the normally hidden "inspect" button becomes an absolutely positioned overlay, so it no longer pads the card's bottom with a blank strip.
 - "Expand by default" relies on DSH's `data-*` contract (`data-tool`, `data-disclosure-row`, `data-disclosure-header`, `data-open`, `aria-expanded`, `data-chat-call-id`). If DSH renames those, expansion fails silently; the highlight style is unaffected.
-- A collapsed ask block keeps its details out of the DOM entirely, so expanding reuses DSH's own disclosure action (the script clicks the row once) instead of forcing it with CSS. Each block expands once — **a block you collapse by hand is never re-expanded** (bookkeeping by `data-chat-call-id`, so a React re-render that replaces the node does not fool it).
+- A collapsed ask block keeps its details out of the DOM entirely, so expanding reuses DSH's own disclosure action (the script clicks the row once) instead of forcing it with CSS. Bookkeeping is per **DOM node** (a `WeakSet` held in page memory only — nothing is persisted, and a refresh clears it), so: a block expands when it appears; **a block you collapse by hand stays collapsed** (otherwise streaming output and scrolling, which mutate the DOM, would keep re-opening it); and **a page refresh or a session switch expands it again** — switching sessions unmounts and rebuilds the subtree, so those are new nodes and therefore new blocks.
 
 ## Version compatibility
 

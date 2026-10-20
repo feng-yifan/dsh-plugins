@@ -45,7 +45,7 @@ $DSH_HOME/profiles/<profile>/fengyifan-dsh-ask-highlight/state.json
 - 配色取自 DSH 主题令牌（`--dsw-alias-state-business-primary`），因此跟随亮色 / 暗色主题自动适配。
 - 展开态四边留白统一 8px：内层内容卡自带的 `margin: 4px 0 4px 4px` 被抹平，常态隐藏的「检查」按钮改为绝对定位浮层，不再在卡片底部垫出空白。
 - 「默认展开」依赖 DSH 的 `data-*` 契约（`data-tool`、`data-disclosure-row`、`data-disclosure-header`、`data-open`、`aria-expanded`、`data-chat-call-id`）。DSH 若改这些属性，展开会静默失效，但高亮样式不受影响。
-- 折叠态的提问明细根本不在 DOM 里，所以展开复用 DSH 自己的展开动作（脚本对披露行点一次），而不是用 CSS 硬撑；每个提问块只展开一次，**用户手动收起后不会被再展开**（按 `data-chat-call-id` 记账，React 重渲染换节点也不会误判）。
+- 折叠态的提问明细根本不在 DOM 里，所以展开复用 DSH 自己的展开动作（脚本对披露行点一次），而不是用 CSS 硬撑。记账按 **DOM 节点**（`WeakSet`，只在页面内存里，不落盘、刷新即清空），因此：块出现时默认展开；**在当前块上手动收起后不会被再次展开**（否则流式输出、滚动引起 DOM 变更时脚本会反复把它点开）；**刷新页面或切换会话后会重新展开**——切换会话时 DSH 卸载并重建子树，节点是新的，自然算新块。
 
 ## 版本适配
 
