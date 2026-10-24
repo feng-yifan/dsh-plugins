@@ -424,8 +424,19 @@ export function sessionCookie(value: string, days: number, secure: boolean): str
   return attrs.join('; ')
 }
 
-export function clearSessionCookie(secure: boolean): string {
-  return `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
+/**
+ * 清空会话 cookie 的 Set-Cookie 头（返回**多条**）。
+ *
+ * 浏览器按 (name, domain, path) 三元组存 cookie：同一个名字挂在不同 path 下就是
+ * 不同条目，每个都会出现在同一条 Cookie 请求头里。历史版本或人工改动可能留下
+ * `/__enhancement` 等其它 path 的残值，只清 `Path=/` 清不掉它们；这些验签失败的
+ * 死值会让请求携带多份同名 cookie（见 Gateway#isAuthenticated 的注释）。
+ */
+export function clearSessionCookie(secure: boolean): string[] {
+  const tail = `Max-Age=0; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
+  return ['/', '/__enhancement', '/__enhancement/login'].map(
+    (path) => `${SESSION_COOKIE}=; Path=${path}; ${tail}`,
+  )
 }
 
 // ---------------------------------------------------------------------------

@@ -368,11 +368,23 @@ export class Gateway {
   // 认证
   // -------------------------------------------------------------------------
 
+  /**
+   * 请求是否携带有效的网关会话。
+   *
+   * 必须遍历**所有**同名 cookie，不能只看第一个：浏览器在 path / 域重叠、或
+   * 同一个地址先后被不同版本写入过时，Cookie 头里会出现多个同名项，顺序由浏览器
+   * 决定（通常按创建时间或 path 长度）。旧实现取 `find(...)` 的第一个，一旦过期
+   * 的旧 cookie 排在前面就永久认证失败 —— 表现为「密码正确、登录页刷新一下又回
+   * 到登录页，且不报密码错误」，用户无法自愈（除非手动清 cookie）。
+   * 现在任何一个值验签通过即视为已认证。
+   */
   private isAuthenticated(req: IncomingMessage): boolean {
     if (!this.store.passwordSet) return false
-    const cookies = parseCookies(req.headers.cookie)
-    const raw = cookies.find(([name]) => name === SESSION_COOKIE)?.[1]
-    return verifySession(this.store.gateSecret, raw) !== null
+    for (const [name, value] of parseCookies(req.headers.cookie)) {
+      if (name !== SESSION_COOKIE) continue
+      if (verifySession(this.store.gateSecret, value) !== null) return true
+    }
+    return false
   }
 
   private isSameOrigin(req: IncomingMessage): boolean {
