@@ -60,6 +60,42 @@ git push origin dsh-vertical-layout@x.y.z           #    推送即触发发布
 
 ## DSH 版本兼容
 
-DSH 在组合 profile 前读取插件的 `peerDependencies`，把其中 `@deepseek-ai/dsh*` 的项与运行中的 dsh 版本比对：**未声明这类 peer 的插件不受版本门禁约束**。本仓库在维护的三个插件都不声明（只依赖稳定的宿主接口与 DOM 数据属性），因此与 DSH 版本松耦合；`dsh-font-settings` 的类型检查冻结在写它时的 dsh 版本。
+DSH 在组合 profile 前做兼容性预检，规则有三条，**优先级不能搞反**：
 
-每周（及手动）由 [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 在 `latest` / `alpha` 渠道上跑类型检查与真实 smoke：仅在 peer 范围过期且验证通过时自动开 PR，失败则开 issue、不自动改代码。
+1. 清单声明了 `engines.dsh` → **只由这个范围决定**，`peerDependencies` 被完全忽略；
+2. 否则 `@deepseek-ai/dsh` 与每个 `@deepseek-ai/dsh-*` 的 peer 范围都必须匹配；
+3. 两者都没声明 → 不受版本门禁约束。
+
+这个门禁的后果是**硬的**：范围不满足时 DSH 在**安装阶段就拒绝**（`installation rejected`），插件根本装不上，不是"装上但不生效"。
+
+### 本仓库的选择：不声明版本范围
+
+本仓库在维护的插件都**有意不声明** DSH 版本要求。理由不是省事：
+
+- **耦合面是接口，不是版本号。** 这些插件只依赖文档化的稳定接口——`webserver/index-inject`（`dsh-host-webserver` 的公开事件）、`webServer.register` / `tapIndex`、`ctx.tools`、`ctx.get('planMode')`——以及少量 DOM 数据属性约定（`data-tool`、`data-disclosure-*`）。给它们写一个版本范围等于声称"只在这些版本上验证过"，是**虚假精度**。
+- **声明会把插件绑到 DSH 的发版节奏上。** 每次 DSH 出一个新的次要版本，都要跟着发一次版，否则老用户装新插件会被直接拒绝。`dsh-font-settings` 是唯一的反例，也是反面教材：它声明了 peers，范围一路钉死，最终因 DSH 内置该能力而废弃。
+- **接口断裂时，我们的失败方式是响亮的。** 缺服务时插件会抛出可读错误（例如 `plan mode is not available to this call: …`），而不是崩溃或静默错乱。而版本门禁是"装上之前就拒绝"，还要求用户用 `allow-version --accept-risk` 接受"可能崩溃或数据丢失"的风险声明——这种说法比实际情况严重得多。
+- **真正抓 API 断裂的是 CI，不是版本门禁。** 版本号不覆盖 ≠ 接口变了；反过来，版本号覆盖也不代表接口没变。所以下面的工作流跑的是 `verify`（tsc）+ 真机 smoke。
+
+如果你确实要给某个包声明范围，**用 `engines.dsh` 而不是 peers**：它是单一真源（声明后 peers 被忽略，避免双轨），并且 `scripts/update-peer-ranges.mjs` 会按优先级自动放宽正确的那一层。
+
+### 自动化
+
+每周（及手动、或 DSH 发版 `repository_dispatch`）由 [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) 在 `latest` / `alpha` 渠道上：
+
+1. 装好**目标版本**的 dsh CLI，让判定函数与被测运行时同版本；
+2. `pnpm install` + `build` + `verify`（类型检查，抓 API 断裂）；
+3. `check-compat` 预检；范围过期就 `update-peer-ranges --write` 自动放宽（按上面的优先级改 `engines.dsh` 或 peers）；
+4. 真机 smoke 每个仍在维护的插件，逐个断言其 `index.html` 标记；
+5. 放宽过就只提交 `packages/*/package.json` 开 PR；任何硬失败开/更新 issue，**不自动改插件代码**。
+
+两个辅助脚本可直接用：
+
+```bash
+node scripts/check-compat.mjs                    # 用本机 dsh 版本预检
+node scripts/check-compat.mjs --runtime 0.3.0 --json
+node scripts/update-peer-ranges.mjs --runtime 0.3.0          # 只打印计划
+node scripts/update-peer-ranges.mjs --runtime 0.3.0 --write  # 落盘
+```
+
+`dsh-font-settings` 已废弃，不参与适配（`DEPRECATED.md` 即标记，两个脚本都会跳过）。

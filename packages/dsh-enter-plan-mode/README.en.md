@@ -88,4 +88,8 @@ Tests cover the naming constraint, the status wording (every `committed`/`queued
 
 ## Version compatibility
 
-This plugin declares no `@deepseek-ai/dsh-*` peerDependencies, so it is not subject to the DSH version gate. It depends on two slices of stable surface: `ctx.tools.register()`/`get()`, and `get()`/`set()` on the `planMode` service obtained via `ctx.get('planMode')`.
+This plugin **deliberately declares no DSH version requirement** (neither `engines.dsh` nor any `@deepseek-ai/dsh-*` peer), so it is not subject to the version gate.
+
+The reasoning matches the rest of the repo (see the [root README](https://github.com/feng-yifan/dsh-plugins#dsh-version-compatibility)): it depends on interface shapes, not version numbers — only `ctx.tools.register()` / `get()`, and `get()` / `set()` on the `planMode` service obtained via `ctx.get('planMode')`. Writing a version range for that is false precision, and it would tie the plugin to DSH's release cadence (an unsatisfied range rejects the plugin at **install time**).
+
+If an interface does break, the failure is loud: when `planMode` cannot be resolved the tool returns an actionable error rather than failing silently or crashing. API breaks are caught by CI's `verify` plus the real smoke test.

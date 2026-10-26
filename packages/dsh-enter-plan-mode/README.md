@@ -88,4 +88,8 @@ pnpm --filter dsh-enter-plan-mode test         # node --test（测构建产物�
 
 ## 版本适配
 
-本插件不声明任何 `@deepseek-ai/dsh-*` peerDependencies，因此不受 DSH 版本门禁约束。它只依赖两个稳定接口面的切片：`ctx.tools.register()`/`get()`，以及 `ctx.get('planMode')` 拿到的 `get()`/`set()`。
+本插件**有意不声明**任何 DSH 版本要求（既无 `engines.dsh`，也无 `@deepseek-ai/dsh-*` peer），因此不受版本门禁约束。
+
+理由与全仓库一致（见[根 README](https://github.com/feng-yifan/dsh-plugins#dsh-版本兼容)）：它依赖的是接口形状而非版本号——只有 `ctx.tools.register()` / `get()`，以及 `ctx.get('planMode')` 拿到的 `get()` / `set()`。给这类插件写版本范围是虚假精度，还会把插件绑到 DSH 的发版节奏上（门禁不满足时是在**安装阶段**直接拒绝）。
+
+接口若变，失败方式是响亮的：取不到 `planMode` 时工具会返回一条可照做的错误，而不是静默失效或崩溃。API 断裂由 CI 的 `verify` + 真机 smoke 捕捉。

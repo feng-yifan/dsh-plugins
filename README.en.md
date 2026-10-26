@@ -60,6 +60,42 @@ The workflow builds and publishes that package with `--provenance --access publi
 
 ## DSH version compatibility
 
-Before composing a profile, DSH reads each plugin's `peerDependencies` and compares any `@deepseek-ai/dsh*` entry against the running dsh version: **a plugin that declares no such peer is not constrained**. The three maintained plugins here declare none (they only rely on stable host interfaces and DOM data attributes), so they are loosely coupled to the DSH version; `dsh-font-settings` type-checks against the dsh version it was written for.
+Before composing a profile, DSH runs a compatibility preflight with three rules — **get the precedence right**:
 
-Every week (and on demand) [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) runs type checks and a real smoke test on the `latest` / `alpha` channels: it only opens a PR when a peer range is outdated and verification passes, and opens an issue (without changing code) when something fails.
+1. The manifest declares `engines.dsh` → **that range alone decides**, and `peerDependencies` are ignored entirely;
+2. Otherwise every `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peer range must match;
+3. Neither declared → no version constraint.
+
+The consequence is **hard**: an unsatisfied range means DSH **rejects the plugin at install time** (`installation rejected`). The plugin never gets installed — this is not "installed but inactive".
+
+### This repo's choice: declare nothing
+
+Every maintained plugin here deliberately declares no DSH version requirement. The reasoning is not convenience:
+
+- **The coupling is to interfaces, not versions.** These plugins rely on documented stable surface — `webserver/index-inject` (a public event of `dsh-host-webserver`), `webServer.register` / `tapIndex`, `ctx.tools`, `ctx.get('planMode')` — plus a few DOM data-attribute conventions (`data-tool`, `data-disclosure-*`). Writing a version range for them would claim "verified only on these versions", which is **false precision**.
+- **Declaring ties the plugin to DSH's release cadence.** Every new DSH minor release would require a release of ours too, or existing users installing the new plugin version get rejected outright. `dsh-font-settings` is both the only counter-example and the cautionary tale: it declared peers, its range got pinned, and it was eventually retired once DSH shipped the capability itself.
+- **When an interface breaks, we fail loudly.** A missing service makes the plugin throw a readable error (for example `plan mode is not available to this call: …`) rather than crash or misbehave silently. The version gate, by contrast, refuses before install and asks the user to accept a risk statement about "crashes or data loss" through `allow-version --accept-risk` — far more alarming than the reality.
+- **CI catches API breaks; the version gate cannot.** A stale range ≠ a changed interface, and a covering range doesn't prove the interface is intact either. That is why the workflow below runs `verify` (tsc) plus a real smoke test.
+
+If you do want a range on some package, **use `engines.dsh`, not peers**: it is a single source of truth (once declared, peers are ignored, so no dual tracking), and `scripts/update-peer-ranges.mjs` widens the correct layer automatically.
+
+### Automation
+
+Every week (and on demand, or via a DSH release `repository_dispatch`) [`.github/workflows/dsh-compat.yml`](.github/workflows/dsh-compat.yml) does the following on the `latest` / `alpha` channels:
+
+1. Installs the **target-version** dsh CLI so the verdict function matches the runtime under test;
+2. `pnpm install` + `build` + `verify` (type checks, catching API breaks);
+3. Runs the `check-compat` preflight; if a range is stale, `update-peer-ranges --write` widens it (honouring the precedence above — `engines.dsh` or peers);
+4. Runs a real smoke test of every maintained plugin, asserting its `index.html` marker;
+5. If ranges changed, opens a PR touching only `packages/*/package.json`; any hard failure opens or updates an issue. It **never changes plugin code automatically**.
+
+Both helper scripts are usable directly:
+
+```bash
+node scripts/check-compat.mjs                    # preflight against the local dsh
+node scripts/check-compat.mjs --runtime 0.3.0 --json
+node scripts/update-peer-ranges.mjs --runtime 0.3.0          # plan only
+node scripts/update-peer-ranges.mjs --runtime 0.3.0 --write  # apply
+```
+
+`dsh-font-settings` is deprecated and excluded from adaptation (its `DEPRECATED.md` marks it; both scripts skip it).

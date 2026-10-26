@@ -1,18 +1,26 @@
 # DSH compatibility
 #
 # 目标：自动跟踪 DSH 发布（每周定时、`dsh-release` repository_dispatch、或手动触发），
-# 用**目标版本**验证本仓库全部插件，并在「只是 peer 范围过期」时自动开一个只改
-# `@deepseek-ai/dsh-*` peer 范围的 PR——不自动改插件代码，也不自动发版。
+# 用**目标版本**验证本仓库全部插件，并在「只是版本范围过期」时自动开一个只改该范围的
+# PR——不自动改插件代码，也不自动发版。
 #
-# 判定依据：DSH 按插件 package.json 中 `@deepseek-ai/dsh` / `@deepseek-ai/dsh-*` 的
-# peerDependencies 决定是否加载插件；范围不覆盖运行中的版本就拒绝加载（安装阶段即拒绝）。
-# 因此 peer 范围就是「支持矩阵」，本工作流只在**验证通过**之后才放宽它。
+# 判定依据（与 DSH 的 unmetRequirements() 严格一致）：
+#   1. 清单声明了 `engines.dsh` → 只由它决定，peerDependencies 被完全忽略；
+#   2. 否则 `@deepseek-ai/dsh` 与每个 `@deepseek-ai/dsh-*` 的 peer 范围都必须匹配；
+#   3. 都没声明 → 不受版本门禁约束。本仓库目前在维护的插件都属于这一类：
+#      它们只依赖文档化的稳定接口（`webserver/index-inject`、`ctx.tools`、
+#      `ctx.get('planMode')` 等），因此有意不声明版本范围。
+#
+# 这个门禁的后果是硬的：范围不满足时 DSH 在**安装阶段就拒绝**，插件装不上，
+# 不是"装上但不生效"。所以声明范围等于把插件绑到 DSH 的发版节奏上——这也是
+# 本仓库默认不声明的原因。`dsh-font-settings`（已废弃）是唯一的反例。
 #
 # 步骤分工：
 #   1. 解析目标版本并装好该版本的 dsh CLI —— `check-compat` / `smoke` 的判定函数与
 #      运行时都取自这份安装，保证「判定 = 被测运行时」；
-#   2. `pnpm install` + `verify`（类型检查，抓 API 断裂）；
-#   3. 兼容预检；需要放宽时 update-peer-ranges --write；
+#   2. `pnpm install` + `verify`（类型检查，抓 API 断裂——这类问题版本门禁抓不到）；
+#   3. 兼容预检；需要放宽时 update-peer-ranges --write（它按上面的优先级自己判断
+#      该改 engines.dsh 还是 peers）；
 #   4. 用目标版本真机 smoke 仍在维护的插件；放宽过就提交 packages/*/package.json 并开 PR；
 #   5. 任何硬失败开/更新 issue，不尝试自动修代码。
 #
@@ -129,22 +137,30 @@ jobs:
           V: ${{ steps.resolve.outputs.version }}
         run: node scripts/check-compat.mjs --runtime "$V"
 
-      - name: Widen stale DSH peer ranges
+      - name: Widen stale DSH version requirements
         if: ${{ steps.compat.outcome == 'failure' }}
         env:
           V: ${{ steps.resolve.outputs.version }}
+        # 该脚本按 DSH 的优先级自己判断该改 engines.dsh 还是 peers：声明了
+        # engines.dsh 的包只放宽它（peers 会被门禁忽略，改它等于空转）。
         run: node scripts/update-peer-ranges.mjs --runtime "$V" --write
 
-      # 无论是否需要放宽，都用目标版本真机跑一遍仍在维护的插件：
-      # 宿主插件断言 index-inject 标记。（dsh-font-settings 已废弃，见其 DEPRECATED.md，
-      # check-compat/update-peer-ranges 会跳过它。）
+      # 无论是否需要放宽，都用目标版本真机跑一遍仍在维护的插件，逐个断言其在
+      # index.html 里的标记——这一步抓的是「插件装上了、却静默不生效」，而版本门禁
+      # 抓不到这类问题（版本号不覆盖 ≠ 接口没变）。
+      # dsh-font-settings 已废弃（见其 DEPRECATED.md），check-compat /
+      # update-peer-ranges 会跳过它，故此处也不 smoke。
       - name: Runtime smoke test on the target DSH
         run: |
           set -euo pipefail
           node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
           node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
+          node scripts/smoke-plugin.mjs --package dsh-pwa-icon --expect-html apple-touch-icon
+          # dsh-enter-plan-mode 是纯宿主插件（注册 dsh_enter_plan_mode 工具），
+          # 没有可断言的 index.html 标记；它只要能在目标版本上被接受并干净启动即可。
+          node scripts/smoke-plugin.mjs --package dsh-enter-plan-mode
 
-      - name: Open pull request widening peer ranges
+      - name: Open pull request widening DSH version requirements
         if: ${{ steps.compat.outcome == 'failure' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -155,20 +171,20 @@ jobs:
         run: |
           set -euo pipefail
           if git diff --quiet -- 'packages/*/package.json'; then
-            echo "::error::check-compat reported an incompatible plugin but no peer range changed"
+            echo "::error::check-compat reported an incompatible plugin but update-peer-ranges changed nothing"
             exit 1
           fi
           BRANCH="compat/dsh-$V"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          # 只提交 peer 范围；不把重建产物或任何依赖版本带进 PR。
+          # 只提交 package.json 里的版本范围；不把重建产物或任何依赖版本带进 PR。
           git add 'packages/*/package.json'
-          git commit -m "chore: widen DSH peer ranges for dsh $V"
+          git commit -m "chore: widen DSH version requirements for dsh $V"
           git push --force origin "$BRANCH"
 
           BODY_FILE="$RUNNER_TEMP/pr-body.md"
-          printf 'DSH `%s` (%s) 不在当前 `@deepseek-ai/dsh-*` peer 范围覆盖内，本 PR 只放宽范围。\n\n验证（均在 `%s` 上执行并通过）：\n- `pnpm -r --filter %s run verify`（tsc 通过，无 API 断裂）\n- `node scripts/check-compat.mjs --runtime %s`（放宽后判定全部兼容）\n- `node scripts/smoke-plugin.mjs`（真启动该版本 dsh web，仍在维护的插件均正常加载）\n\n仅改动 `packages/*/package.json` 的 `peerDependencies` 范围，未改插件代码与依赖版本。\n\nRun: %s\n' \
+          printf 'DSH `%s` (%s) 不在当前声明的版本范围内，本 PR 只放宽该范围。\n\n验证（均在 `%s` 上执行并通过）：\n- `pnpm -r --filter %s run verify`（tsc 通过，无 API 断裂）\n- `node scripts/check-compat.mjs --runtime %s`（放宽后判定全部兼容）\n- `node scripts/smoke-plugin.mjs`（真启动该版本 dsh web，仍在维护的插件均正常加载）\n\n仅改动 `packages/*/package.json` 中实际参与门禁的那一层（`engines.dsh`，或缺省时的 `@deepseek-ai/dsh-*` peer 范围），未改插件代码与依赖版本。\n\nRun: %s\n' \
             "$V" "$CHANNEL" "$V" "'./packages/*'" "$V" "$RUN_URL" > "$BODY_FILE"
 
           if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
@@ -195,8 +211,10 @@ jobs:
               '',
               `Run: ${runUrl}`,
               '',
-              'A failure here usually means a real API break in the DSH surface rather than a stale peer',
-              'range. Fix the plugin code, then re-run the workflow. No automatic code fix was attempted.',
+              'A failure here usually means a real API break in the DSH surface rather than a stale',
+              'version range — note that the version gate cannot catch that class of break, only',
+              'verify + smoke can. Fix the plugin code, then re-run the workflow. No automatic code',
+              'fix was attempted.',
             ].join('\n')
             const { data: issues } = await github.rest.issues.listForRepo({
               ...context.repo,
