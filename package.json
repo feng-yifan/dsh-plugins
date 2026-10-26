@@ -13,7 +13,8 @@
     "build:vertical-layout": "pnpm --filter dsh-vertical-layout run build",
     "build:font-settings": "pnpm --filter dsh-font-settings run build",
     "build:ask-highlight": "pnpm --filter dsh-ask-highlight run build",
-    "build:pwa-icon": "pnpm --filter dsh-pwa-icon run build"
+    "build:pwa-icon": "pnpm --filter dsh-pwa-icon run build",
+    "build:enter-plan-mode": "pnpm --filter dsh-enter-plan-mode run build"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

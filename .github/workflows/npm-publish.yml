@@ -26,6 +26,7 @@ on:
       - 'dsh-ask-highlight@*'
       - 'dsh-pwa-icon@*'
       - 'dsh-enhancement@*'
+      - 'dsh-enter-plan-mode@*'
   workflow_dispatch:
     inputs:
       package:
@@ -37,6 +38,7 @@ on:
           - dsh-ask-highlight
           - dsh-pwa-icon
           - dsh-enhancement
+          - dsh-enter-plan-mode
 
 permissions:
   contents: read
