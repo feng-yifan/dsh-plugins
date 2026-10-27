@@ -36,6 +36,29 @@ After a call the model receives one of three status lines:
 
 The tool stays registered while plan mode is **inactive**, matching upstream `exit_plan_mode`. The point is that the request's tool catalog stays stable across mode changes — otherwise every enter/exit would invalidate the prompt cache. Entering plan mode changes the `plan:policy` system-prompt section, not the catalog.
 
+### Service resolution: three paths, `agentPresets` first
+
+It looks for the `planMode` service along three paths, in this fixed order: **`agentPresets.serviceFor(agent, 'planMode')`** → the calling agent scope's `ctx.get('planMode')` → the plugin's own context. The first is the only working path in preset-based deployments like `dsh-web-app`; see the next section.
+
+## Why the service must be read through `agentPresets` (bug fixed in 1.0.2)
+
+1.0.1 and earlier only used `exec.agent.ctx.get('planMode')`, which in a real web session made every call to this tool fail with:
+
+```
+plan mode is not available to this call: the @deepseek-ai/dsh-plan-mode plugin
+is not mounted in the calling agent's scope, ...
+```
+
+`exit_plan_mode` was right there in the tool catalog and `/plan` worked, so the missing thing was never the plugin — it was the **resolution path**:
+
+- The preset's plan-mode row carries `isolate: { planMode: true }`, so the cordis loader gives it a **private realm symbol** (`Symbol("planMode#<entryId>")`) and the service instance is stored under that symbol in `reflect.store`.
+- `ctx.get()` resolves through the realm symbol of the *current* context. The agent scope is a child of the preset scope, but `planMode` on that chain still resolves to the root realm's symbol — where no instance exists, so it returns `undefined`.
+- In other words: the service **is** mounted; the symbol path `get()` follows simply cannot reach it. `undefined` at `apply()` time or from `exec.agent.ctx` proves nothing about whether the plugin is installed.
+
+The correct move is to ask the preset registry: `agentPresets.serviceFor(agent, 'planMode')` walks the store by fiber ownership (object identity), so it crosses the realm. This is upstream's own pattern — `dsh-api-session-controller` resolves `skills` as `presets?.serviceFor(live, 'skills') ?? this.ctx.get('skills')`.
+
+Reproduction and verification used real cordis (building the preset isolate realm + agent scope + root-plane `agentPresets`): before the fix both the agent scope and the root returned `undefined` from `get()`, while after the fix `serviceFor` returns the service, `set()` is callable, and the tool returns `committed`. The test suite also pins that shape.
+
 ### Why the description is only three sentences (286 chars)
 
 The description carries one job only: **whether to call this tool** — what it does / when to use it / when not to. It deliberately does not say what to do inside plan mode, nor what to do next; both already have a more authoritative home:
@@ -105,6 +128,6 @@ Tests cover the naming constraint, the status wording (every `committed`/`queued
 
 This plugin **deliberately declares no DSH version requirement** (neither `engines.dsh` nor any `@deepseek-ai/dsh-*` peer), so it is not subject to the version gate.
 
-The reasoning matches the rest of the repo (see the [root README](https://github.com/feng-yifan/dsh-plugins#dsh-version-compatibility)): it depends on interface shapes, not version numbers — only `ctx.tools.register()` / `get()`, and `get()` / `set()` on the `planMode` service obtained via `ctx.get('planMode')`. Writing a version range for that is false precision, and it would tie the plugin to DSH's release cadence (an unsatisfied range rejects the plugin at **install time**).
+The reasoning matches the rest of the repo (see the [root README](https://github.com/feng-yifan/dsh-plugins#dsh-version-compatibility)): it depends on interface shapes, not version numbers — only `ctx.tools.register()` / `get()`, `serviceFor(agent, name)` on the `agentPresets` service obtained via `ctx.get('agentPresets')`, and `get()` / `set()` on the `planMode` service. Writing a version range for that is false precision, and it would tie the plugin to DSH's release cadence (an unsatisfied range rejects the plugin at **install time**).
 
 If an interface does break, the failure is loud: when `planMode` cannot be resolved the tool returns an actionable error rather than failing silently or crashing. API breaks are caught by CI's `verify` plus the real smoke test.

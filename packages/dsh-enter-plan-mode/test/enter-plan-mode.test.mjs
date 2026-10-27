@@ -403,7 +403,90 @@ test('render 把结果翻成文本块', () => {
 // resolvePlanModeService：作用域解析顺序（本插件最容易写错的地方）
 // ---------------------------------------------------------------------------
 
-test('优先用 agent 作用域，插件上下文有也不抢', () => {
+test('优先用 agentPresets 解析（web profile 的唯一可行路径）', () => {
+  // 真实 web profile 的形态：plan-mode 挂在 preset 的 isolate:{planMode:true}
+  // group 里，agent.ctx.get() 和根 ctx.get() 都返回 undefined，只有 registry
+  // 的 serviceFor 能按 fiber 归属跨 realm 命中。这里如实复刻那个形态——
+  // 1.0.1 及之前版本因为没有这条路径，在真实会话里报 "plan mode is not available"。
+  const fromPreset = fakePlanMode()
+  const presets = { serviceFor: (agent, name) => (name === 'planMode' ? fromPreset : undefined) }
+  const pluginCtx = fakeCtx({ agentPresets: presets })
+  const agent = { ctx: fakeCtx({}) }
+  assert.equal(resolvePlanModeService(pluginCtx, agent), fromPreset)
+})
+
+test('agentPresets 优先于 agent 作用域，避免两条路径给出不同实例', () => {
+  const fromPreset = fakePlanMode()
+  const fromAgent = fakePlanMode()
+  const presets = { serviceFor: () => fromPreset }
+  const picked = resolvePlanModeService(fakeCtx({ agentPresets: presets }), {
+    ctx: fakeCtx({ planMode: fromAgent }),
+  })
+  assert.equal(picked, fromPreset)
+})
+
+test('agentPresets 取不到时仍然回退，不因 registry 存在就放弃', () => {
+  // 自定义 preset 没用 isolate 挂 plan-mode 时 serviceFor 返回 undefined，
+  // 必须继续走 agent 作用域，否则又会退回到"web 下永远不可用"的老毛病。
+  const fromAgent = fakePlanMode()
+  const presets = { serviceFor: () => undefined }
+  const picked = resolvePlanModeService(fakeCtx({ agentPresets: presets }), {
+    ctx: fakeCtx({ planMode: fromAgent }),
+  })
+  assert.equal(picked, fromAgent)
+})
+
+test('agentPresets 形状异常/抛错/结构不符时安全降级', () => {
+  const fromAgent = fakePlanMode()
+  const agent = { ctx: fakeCtx({ planMode: fromAgent }) }
+  const bogusRegistries = [
+    null,
+    'nope',
+    42,
+    {},
+    { serviceFor: 'not-a-function' },
+    { serviceFor: () => { throw new Error('registry disposed') } },
+    { serviceFor: () => ({}) },   // 结构不符：不是服务
+    { serviceFor: () => 'nope' }, // 结构不符：不是对象
+  ]
+  for (const agentPresets of bogusRegistries) {
+    assert.equal(
+      resolvePlanModeService(fakeCtx({ agentPresets }), agent),
+      fromAgent,
+      `agentPresets=${JSON.stringify(agentPresets)} 时应回退到 agent 作用域`,
+    )
+  }
+})
+
+test('serviceFor 只按服务名 planMode 查询，不瞎猜别的名字', () => {
+  const asked = []
+  const presets = {
+    serviceFor: (agent, name) => {
+      asked.push(name)
+      return undefined
+    },
+  }
+  resolvePlanModeService(fakeCtx({ agentPresets: presets }), { ctx: fakeCtx({}) })
+  assert.deepEqual(asked, ['planMode'])
+})
+
+test('agentPresets 存在但 agent 缺失时不调用它', () => {
+  // 没有 agent 就没有 preset 归属，问 registry 没有意义，也避免它自己抛。
+  let called = 0
+  const presets = {
+    serviceFor: () => {
+      called += 1
+      return undefined
+    },
+  }
+  for (const agent of [undefined, null, 42, 'nope']) {
+    called = 0
+    resolvePlanModeService(fakeCtx({ agentPresets: presets }), agent)
+    assert.equal(called, 0, `agent=${JSON.stringify(agent)} 时不该向 registry 查询`)
+  }
+})
+
+test('优先用 agentPresets，其次 agent 作用域，再次插件上下文', () => {
   const fromAgent = fakePlanMode()
   const fromPlugin = fakePlanMode()
   const picked = resolvePlanModeService(fakeCtx({ planMode: fromPlugin }), { ctx: fakeCtx({ planMode: fromAgent }) })
@@ -416,7 +499,7 @@ test('agent 作用域没有时回退到插件上下文', () => {
   assert.equal(picked, fromPlugin)
 })
 
-test('两处都没有时返回 undefined', () => {
+test('三处都没有时返回 undefined', () => {
   assert.equal(resolvePlanModeService(fakeCtx({}), { ctx: fakeCtx({}) }), undefined)
 })
 

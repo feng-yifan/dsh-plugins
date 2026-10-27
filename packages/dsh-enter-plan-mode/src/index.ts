@@ -15,19 +15,22 @@
  * 四个刻意选择：
  *
  *  1. **`planMode` 在工具执行期从 `exec.agent.ctx` 取，不从插件自身的上下文取。**
- *     这是实测结论：`dsh-web-app` 把 plan-mode 从宿主平面禁掉
- *     （`- id: plan-mode` + `disabled: true`），改在**每个 agent preset 的
- *     group 里**挂载，并带 `isolate: { planMode: true }`——服务实例活在 agent
- *     的 cordis 上下文里。一次性 profile + 探针实测：`apply()` 阶段根上下文
- *     `ctx.get('planMode') === undefined`，而同一进程到工具执行期
- *     `exec.agent.ctx.get('planMode')` 能拿到完整服务且 `set()` 可用。
- *     只从根上下文取会让工具在 web profile 里**永远**报"计划模式不可用"。
+ *     这是实测结论，但**1.0.2 修正过一次**：`dsh-web-app` 把 plan-mode 从宿主
+ *     平面禁掉（`- id: plan-mode` + `disabled: true`），改在**每个 agent preset
+ *     的 group 里**挂载，并带 `isolate: { planMode: true }`。isolate 意味着
+ *     服务实例存在一个 **realm 私有的 symbol** 下，而 `ctx.get()` 只走当前
+ *     上下文那条 realm 链——所以 `apply()` 期的根上下文、工具执行期的
+ *     `exec.agent.ctx`，**两者都拿不到**（1.0.1 以为前者不行、后者行，实测
+ *     后者同样返回 undefined，于是 web profile 下永远报"计划模式不可用"）。
+ *     正确入口是宿主的 `agentPresets.serviceFor(agent, 'planMode')`：它按 fiber
+ *     归属查 store，能越过 realm。详见 `src/plan-mode-tool.ts` 的
+ *     `resolvePlanModeService()`。
  *  2. **不声明 `inject: ['planMode']`。** 静态 inject 会让本插件在缺少
  *     plan-mode 的部署里永远"等待依赖"（app-boot 失败表：注入的服务不可用 →
  *     optional 条目警告并等待），插件行看起来装了却什么都不提供。而且按上面
- *     第 1 点，根上下文本来就没有这个服务——静态 inject 在这里是死路。
- *     惰性取则让插件照常加载、工具照常出现在目录里，只在真被调用时给一条能
- *     照做的报错。`tools` 必须静态声明——注册时机不能等。
+ *     第 1 点，任何静态声明在那条 realm 链上都解析不到——静态 inject 在这里
+ *     是死路。惰性取则让插件照常加载、工具照常出现在目录里，只在真被调用时
+ *     给一条能照做的报错。`tools` 必须静态声明——注册时机不能等。
  *  3. **工具在计划模式未激活时也一直注册着。** 上游 `exit_plan_mode` 同样常驻，
  *     目的都是让请求里的工具目录跨模式切换保持稳定（否则每次进出计划模式都会
  *     打掉 prompt 缓存）。进入与否只改变系统提示里的 `plan:policy` 段落。

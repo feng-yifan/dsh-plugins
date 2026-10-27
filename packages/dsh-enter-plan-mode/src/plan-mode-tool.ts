@@ -241,28 +241,90 @@ function isDuplicateRegistration(error: unknown): boolean {
 }
 
 /**
- * 从一个上下文里安全地取 `planMode` 服务。
+ * 从一个上下文里安全地取任意服务。
  *
- * 必须用 `ctx.get(name)` 而不是 `ctx.planMode`：cordis 的属性访问要求该服务
+ * 必须用 `ctx.get(name)` 而不是 `ctx.<name>`：cordis 的属性访问要求该服务
  * 已在静态 `inject` 里声明，否则直接抛
- * `cannot get property "planMode" without inject`。而本插件不能静态声明它
+ * `cannot get property "<name>" without inject`。而本插件不能静态声明它们
  * （理由见 `src/index.ts` 文件头：缺 plan-mode 的部署里整行插件会永远等待）。
  *
  * @param ctx 候选上下文。
+ * @param name 服务名。
  * @returns 服务实例，或 undefined（缺失/取值抛错）。
  */
-function readPlanMode(ctx: unknown): PlanModeLike | undefined {
+function readService(ctx: unknown, name: string): unknown {
   if (ctx === null || typeof ctx !== 'object') return undefined
   const getter = (ctx as { get?: unknown }).get
   if (typeof getter !== 'function') return undefined
   try {
-    const service = (getter as (name: string) => unknown).call(ctx, 'planMode')
-    if (service === null || typeof service !== 'object') return undefined
-    const candidate = service as PlanModeLike
-    // 结构校验：只接受真的具备 get/set 的服务，避免拿到同名的别的东西。
-    return typeof candidate.get === 'function' && typeof candidate.set === 'function'
-      ? candidate
-      : undefined
+    return (getter as (name: string) => unknown).call(ctx, name)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 从一个上下文里安全地取 `planMode` 服务。
+ *
+ * @param ctx 候选上下文。
+ * @returns 服务实例，或 undefined（缺失/取值抛错/结构不符）。
+ */
+function readPlanMode(ctx: unknown): PlanModeLike | undefined {
+  return asPlanMode(readService(ctx, 'planMode'))
+}
+
+/**
+ * 把候选值校验成 `planMode` 服务。
+ *
+ * 与 `readPlanMode()` 分开是因为 `agentPresets.serviceFor()` 直接返回值本身
+ * （不是经过 cordis 的 store 查询），校验逻辑必须共用同一套。
+ *
+ * @param service 候选值。
+ * @returns 通过结构校验的服务；否则 undefined。
+ */
+function asPlanMode(service: unknown): PlanModeLike | undefined {
+  if (service === null || typeof service !== 'object') return undefined
+  const candidate = service as PlanModeLike
+  // 结构校验：只接受真的具备 get/set 的服务，避免拿到同名的别的东西。
+  return typeof candidate.get === 'function' && typeof candidate.set === 'function'
+    ? candidate
+    : undefined
+}
+
+/**
+ * 通过宿主的 `agentPresets` 服务解析 agent 所属 preset 里挂载的服务。
+ *
+ * **这是 web profile 下唯一能取到 `planMode` 的路径。** 原因在 cordis 的
+ * isolate 语义，不在装载顺序：
+ *
+ *  - preset 里 plan-mode 那一行带 `isolate: { planMode: true }`。cordis 的
+ *    loader 为它分配一个**独立的 realm symbol**（`LocalRealm`，
+ *    `Symbol("planMode#<entryId>")`），服务实例存在 `reflect.store` 的这个
+ *    symbol 下。
+ *  - `ctx.get()` / `_getImpl()` 走的是 `this.ctx[Context.isolate][name]`，
+ *    也就是**当前上下文那条 realm 的** symbol。agent 作用域是 preset 作用域的
+ *    子节点，但它继承的那条 realm 链上没有为 `planMode` 分配新 symbol，
+ *    于是解析到的是根 realm 的 symbol——那里没有实例，`get()` 返回 undefined。
+ *  - 实测（真实 cordis，与 `dsh-web-app` 同构地搭出 preset isolate + agent
+ *    作用域）：`agent.ctx.get('planMode') === undefined`、
+ *    `root.get('planMode') === undefined`，但 `store` 里确实有实例。
+ *
+ * 因此必须问 preset registry 要：它按 fiber 归属遍历 store（`withinFiber` 是
+ * 对象身份比较），能跨 realm 命中。这也是上游自己的用法——见
+ * `dsh-api-session-controller` 里解析 `skills`：
+ * `presets?.serviceFor(live, 'skills') ?? this.ctx.get('skills')`。
+ *
+ * @param presets 宿主的 `agentPresets` 服务（可能不存在）。
+ * @param agent 发起调用的 agent。
+ * @returns 服务实例，或 undefined。
+ */
+function readFromAgentPresets(presets: unknown, agent: unknown): PlanModeLike | undefined {
+  if (presets === null || typeof presets !== 'object') return undefined
+  const resolver = (presets as { serviceFor?: unknown }).serviceFor
+  if (typeof resolver !== 'function') return undefined
+  if (agent === null || typeof agent !== 'object') return undefined
+  try {
+    return asPlanMode((resolver as (agent: unknown, name: string) => unknown).call(presets, agent, 'planMode'))
   } catch {
     return undefined
   }
@@ -271,29 +333,33 @@ function readPlanMode(ctx: unknown): PlanModeLike | undefined {
 /**
  * 解析宿主 `planMode` 服务。
  *
- * **必须优先从 agent 作用域取**，这一点是实测出来的、不是猜的：
+ * 三条路径，顺序是**实测确定的**，不是猜的：
  *
- *  - `dsh-web-app` 把 plan-mode 从宿主平面禁掉（`- id: plan-mode` +
- *    `disabled: true`），改在**每个 agent preset 的 group 里**挂载，并带
- *    `isolate: { planMode: true }`。也就是说服务实例活在 agent 的 cordis 上下文
- *    里，宿主根上下文根本看不到它。
- *  - 实测（一次性 profile + 探针插件）：`apply()` 阶段根上下文
- *    `ctx.get('planMode') === undefined`；同一进程里到了工具执行期，
- *    `exec.agent.ctx.get('planMode')` 拿到完整服务且 `set()` 可用。
+ *  1. **`agentPresets.serviceFor(agent, 'planMode')`** —— web profile 的主路径。
+ *     plan-mode 挂在每个 agent preset 的 `isolate: { planMode: true }` group
+ *     里，服务实例位于一个 realm 私有的 symbol 下，`ctx.get()` 从 agent 作用域
+ *     和根作用域都取不到（理由与实测见 `readFromAgentPresets()`）。registry 按
+ *     fiber 归属查 store，能越过 realm。
+ *  2. **agent 作用域的 `ctx.get('planMode')`** —— 保持兼容：preset 若没用
+ *     isolate 挂载（自定义 preset、旧配置），这条路直接命中，无需 registry。
+ *  3. **插件自身上下文** —— 只在 plan-mode 仍挂在宿主平面的部署里命中
+ *     （例如 `headless` profile：dsh-base 在扁平层挂 plan-mode，没有 preset）。
  *
- * 所以解析顺序是「调用者 agent 的作用域 → 插件自身上下文」，后者只在
- * plan-mode 仍然挂在宿主平面的部署（如 `headless` profile）里命中。
+ * 不能只留第 2 条：第 2 条在 web profile 下**永远**返回 undefined，那正是
+ * 1.0.1 及之前版本在真实会话里报 "plan mode is not available" 的原因。
  *
  * @param pluginCtx 插件自身的 cordis 上下文（根/宿主平面）。
  * @param agent 发起调用的 agent。
- * @returns 可用的 planMode 服务；两处都没有时为 undefined。
+ * @returns 可用的 planMode 服务；三处都没有时为 undefined。
  */
 export function resolvePlanModeService(
   pluginCtx: unknown,
   agent: unknown,
 ): PlanModeLike | undefined {
   const agentCtx = (agent as { ctx?: unknown } | undefined)?.ctx
-  return readPlanMode(agentCtx) ?? readPlanMode(pluginCtx)
+  // 宿主平面上的 agentPresets（dsh-web-app 把它挂在根层，不在 preset 里）。
+  const presets = readService(pluginCtx, 'agentPresets')
+  return readFromAgentPresets(presets, agent) ?? readPlanMode(agentCtx) ?? readPlanMode(pluginCtx)
 }
 
 /**

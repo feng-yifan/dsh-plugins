@@ -36,7 +36,30 @@ dsh plugin --profile web add dsh-enter-plan-mode
 
 工具在计划模式**未**激活时也一直注册着——跟上游 `exit_plan_mode` 一样，目的是让请求里的工具目录跨模式切换保持稳定，否则每次进出都会打掉 prompt 缓存。进出计划模式改变的是系统提示里的 `plan:policy` 段，不是工具目录。
 
-### 工具描述为什么只有三句（286 字符）
+### 服务解析顺序：三条路径，`agentPresets` 优先
+
+它按三条路径找 `planMode` 服务，顺序固定：**`agentPresets.serviceFor(agent, 'planMode')`** → 调用者 agent 作用域的 `ctx.get('planMode')` → 插件自身上下文。第一条是 `dsh-web-app` 这类 preset 化部署下唯一有效的路径，原因见下节。
+
+## 为什么必须问 `agentPresets` 要服务（1.0.2 修的 bug）
+
+1.0.1 及之前只走「`exec.agent.ctx.get('planMode')`」，在真实 web 会话里调用工具稳定报：
+
+```
+plan mode is not available to this call: the @deepseek-ai/dsh-plan-mode plugin
+is not mounted in the calling agent's scope, ...
+```
+
+`exit_plan_mode` 明明就在工具目录里、`/plan` 也能用，所以缺的不是插件，是**解析方式**：
+
+- preset 里 plan-mode 那一行带 `isolate: { planMode: true }`，cordis 的 loader 为它分配一个**独立的 realm symbol**（`Symbol("planMode#<entryId>")`），服务实例存在 `reflect.store` 的这个 symbol 下。
+- `ctx.get()` 走的是当前上下文那条 realm 链上的 symbol。agent 作用域虽然是 preset 作用域的子节点，但它那条链上 `planMode` 仍解析到根 realm 的 symbol——那里没有实例，于是返回 `undefined`。
+- 换句话说：服务**确实挂载着**，只是 `get()` 走的那条 symbol 路径到不了它。`apply()` 期取不到、`exec.agent.ctx` 也取不到，都不能证明插件没装。
+
+正确做法是问 preset registry：`agentPresets.serviceFor(agent, 'planMode')` 按 fiber 归属（对象身份）遍历 store，能越过 realm 命中。这也是上游自己的用法——`dsh-api-session-controller` 解析 `skills` 时就是 `presets?.serviceFor(live, 'skills') ?? this.ctx.get('skills')`。
+
+复现与验证用的是真实 cordis（搭出 preset isolate realm + agent 作用域 + 根平面的 `agentPresets`）：修复前 agent 作用域与根作用域的 `get()` 都是 `undefined`，修复后 `serviceFor` 能拿到服务、`set()` 可用、工具返回 `committed`。测试里也把这个形态固化成用例。
+
+## 工具描述为什么只有三句（286 字符）
 
 描述只承担**要不要调用**：干什么 / 何时用 / 何时不用。它不讲"进去之后怎么干"，也不讲"下一步做什么"——那两件事各有更权威的出处：
 
@@ -105,6 +128,6 @@ pnpm --filter dsh-enter-plan-mode test         # node --test（测构建产物�
 
 本插件**有意不声明**任何 DSH 版本要求（既无 `engines.dsh`，也无 `@deepseek-ai/dsh-*` peer），因此不受版本门禁约束。
 
-理由与全仓库一致（见[根 README](https://github.com/feng-yifan/dsh-plugins#dsh-版本兼容)）：它依赖的是接口形状而非版本号——只有 `ctx.tools.register()` / `get()`，以及 `ctx.get('planMode')` 拿到的 `get()` / `set()`。给这类插件写版本范围是虚假精度，还会把插件绑到 DSH 的发版节奏上（门禁不满足时是在**安装阶段**直接拒绝）。
+理由与全仓库一致（见[根 README](https://github.com/feng-yifan/dsh-plugins#dsh-版本兼容)）：它依赖的是接口形状而非版本号——只有 `ctx.tools.register()` / `get()`、`ctx.get('agentPresets')` 拿到的 `serviceFor(agent, name)`，以及 `planMode` 服务上的 `get()` / `set()`。给这类插件写版本范围是虚假精度，还会把插件绑到 DSH 的发版节奏上（门禁不满足时是在**安装阶段**直接拒绝）。
 
 接口若变，失败方式是响亮的：取不到 `planMode` 时工具会返回一条可照做的错误，而不是静默失效或崩溃。API 断裂由 CI 的 `verify` + 真机 smoke 捕捉。
