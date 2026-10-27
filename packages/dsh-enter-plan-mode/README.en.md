@@ -36,6 +36,21 @@ After a call the model receives one of three status lines:
 
 The tool stays registered while plan mode is **inactive**, matching upstream `exit_plan_mode`. The point is that the request's tool catalog stays stable across mode changes — otherwise every enter/exit would invalidate the prompt cache. Entering plan mode changes the `plan:policy` system-prompt section, not the catalog.
 
+### Why the description is only three sentences (286 chars)
+
+The description carries one job only: **whether to call this tool** — what it does / when to use it / when not to. It deliberately does not say what to do inside plan mode, nor what to do next; both already have a more authoritative home:
+
+| Content | Owner | Delivered when |
+| --- | --- | --- |
+| Inside plan mode: no editing/writing files, no formatters, no commits; `exit_plan_mode` must be that response's only and final tool call | The `plan:policy` system-prompt section (upstream `section` config, six paragraphs) | Injected on every request while plan mode is active |
+| "Explore non-mutatively, then hand the plan over via `exit_plan_mode`; don't act before approval" | `describeResult()` — the tool-result text (all three branches) | After every successful call |
+
+The earlier description said both a second time (574 chars, five sentences), which made three copies of the same rules — and the description's copy was the least accurate: it collapsed "the user may choose to keep planning, and their feedback comes back in the tool result so you revise and present again" into a straight line. The accurate version lives in `exit_plan_mode`'s own description.
+
+It also deliberately does **not** say "plan mode changes no sandbox or approval policy, and every tool stays callable". That fact is genuinely absent from model-visible text (it appears only in upstream's README and source comments, written for integrators), but measurement says the model does not need it: in a real plan-mode session there were 154 tool calls across 11 tools, zero sandbox or approval denials, and no self-imposed "I can't do this in plan mode" statements anywhere. Upstream leaving it out of model-visible prompts is deliberate — the model needs to know what to do, not whether something would stop it. Worse, that sentence sits right after the policy's prohibitions, so it reads as "nobody is stopping you" and weakens compliance.
+
+This also fixed a mechanical defect in the old text: separating paragraphs with `''` and then `.join(' ')` produced **two** consecutive spaces, and the native function-calling path passes descriptions through verbatim (`dsh-tools`' `schemaOf()` does not collapse whitespace). None of upstream's 49 tool descriptions contain a double space or a newline. Tests now assert both.
+
 ## How the tool name is derived: `<package prefix>_<capability>`
 
 The natural name is `enter_plan_mode`: symmetric with `exit_plan_mode`, instantly understandable. **This plugin deliberately does not use it.**

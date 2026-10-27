@@ -111,6 +111,36 @@ test('工具定义只使用 DSH 支持的 JSON Schema 子集', () => {
   }
 })
 
+test('描述只承担 dispatch 决策，不越界讲流程', () => {
+  const { description } = createDefinition({})
+
+  // 双空格：旧版用 '' 分段 + .join(' ') 造出两处连续空格，而原生 function calling
+  // 路径原样透传（dsh-tools 的 schemaOf() 不折叠空白），模型看到的就是脏文本。
+  // 上游 49 条工具描述里双空格 0 条。这里用正则守全部连续空白，不只是两个空格。
+  assert.ok(!/\s{2,}/.test(description), '描述不应含连续空白')
+  assert.equal(description, description.trim(), '描述不应有首尾空白')
+  assert.ok(!description.includes('\n'), '描述应为单段落（上游工具描述无换行）')
+
+  // "进去之后怎么干"归 plan:policy 系统提示段，"下一步做什么"归 describeResult()。
+  // 描述里再写一遍就是第三份副本，而且是最容易走样的那份。
+  for (const leaked of ['non-mutating', 'exit_plan_mode', 'The user reviews it']) {
+    assert.ok(
+      !description.includes(leaked),
+      `描述不应复述流程（"${leaked}"），那是 plan:policy / 工具结果文案的职责`,
+    )
+  }
+
+  // 也不要写"计划模式不改变沙箱/审批、工具全能调"——实测模型不需要这条
+  // （见 src/plan-mode-tool.ts 的"为什么砍到三句"），而它紧跟 policy 的禁令
+  // 之后反而会削弱遵守度。
+  for (const leaked of ['sandbox', 'approval', 'callable', 'restrict']) {
+    assert.ok(
+      !description.includes(leaked),
+      `描述不应谈执行机制（"${leaked}"），计划模式与沙箱/审批解耦这件事不归它讲`,
+    )
+  }
+})
+
 test('定义必备字段齐全，且无参数', () => {
   const definition = createDefinition({})
   assert.equal(definition.name, TOOL_NAME)

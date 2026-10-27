@@ -98,14 +98,71 @@ export const TOOL_NAME = `${TOOL_PREFIX}_${TOOL_SUFFIX}`
  */
 export const UPSTREAM_EQUIVALENT_NAME = TOOL_SUFFIX
 
-/** 工具描述：讲清用途与"调用后请继续规划、不要直接动手"。 */
+/**
+ * 工具描述：只承担**要不要调用**这一个职责。
+ *
+ * 三句 = 干什么 / 何时用 / 何时不用。刻意**不**写"进去之后怎么干"和"下一步做什么"
+ * （见下面"为什么砍到三句"）。
+ *
+ * ## 为什么砍到三句（2026-10-27）
+ *
+ * 旧版 574 字符、五句，后两句是：
+ *
+ *   In plan mode, explore with non-mutating reads/searches, then present the
+ *   finished plan through exit_plan_mode. The user reviews it there, and
+ *   implementation starts only after approval.
+ *
+ * 它们讲的是**进入之后怎么做**，而这件事已有两个更权威、更完整的出处：
+ *
+ *  1. `plan:policy` 系统提示段（`@deepseek-ai/dsh-plan-mode` 的 `section` 配置，
+ *     `dsh-base` 与 `dsh-web-app/presets/standard.patch.yml` 各有一份）。计划模式
+ *     激活后逐请求注入，六段，明确到"禁止编辑/写文件/跑格式化/commit"以及
+ *     "exit_plan_mode 必须是该轮唯一且最后的工具调用"。实测：人工 `/plan` 进入后
+ *     系统提示从 8530 涨到 10890 字符，退出后缩回（session-a9de2c42，seq 3→4→10、
+ *     904→906）。
+ *  2. 工具**结果**文案（见 `describeResult()`）——三个分支全都带
+ *     "Explore with non-mutating reads and searches, then present the complete
+ *     plan through exit_plan_mode. Do not carry out the plan before the user
+ *     approves it."，调用成功后的下一步由它负责。
+ *
+ * 留在描述里的版本反而是三处里**最不准的**：它把"用户可能选择继续规划、反馈回到
+ * 工具结果里再改一版"这一支简化成了直线（准确版本在 `exit_plan_mode` 的
+ * description 里）。同一份规则三个副本，改一处漂两处。
+ *
+ * ## 也刻意**不**写"计划模式不改变沙箱/审批"（2026-10-27 实测后推翻）
+ *
+ * 曾经想加一句 "Plan mode is guidance only: it changes no sandbox or approval
+ * policy, and every tool stays callable."，理由是这条事实在模型可见文本里无处可
+ * 寻（该说法只在上游 README 与源码注释里，是写给集成者看的；模型可见的六段
+ * policy 里 sandbox/callable/does not restrict 一个词都没有）。
+ *
+ * 但**实测表明模型不需要它**：会话 session-a9de2c42 计划模式期间 154 次工具调用、
+ * 11 种工具（bash 134、subagent、web_fetch、ask_user_question…），零次沙箱/审批
+ * 拒绝，全部 assistant 消息里没有任何"因计划模式而不能/不可/禁止"的自我限制表述。
+ * 工具目录进出前后完全一致（83 个，含 bash/write/edit）。上游把这条事实排除在模型
+ * 可见提示之外是**刻意的**：模型需要知道该做什么，不需要知道有没有机制在拦。
+ *
+ * 更反面的理由：这句紧跟在 policy 段"不得写文件/不得 commit"之后，等于告诉模型
+ * "这是纯建议、没人拦你"，会**削弱前文的遵守度**。合规靠 policy 段说"做什么"，
+ * 不靠描述说"有没有拦"。
+ *
+ * 已知样本局限：全机 98 个会话只有 2 个进过计划模式，且都是 danger-full-access +
+ * approval: never；"受限沙箱 + 计划模式"的组合从未实测。即便在那种情形，模型需要
+ * 知道的也是"不要写文件"（policy 已说），不是"写文件其实不会被拦"。
+ *
+ * ## 顺便：不要再把空字符串放进数组
+ *
+ * 旧版用 `''` 分隔段落，而 `.join(' ')` 把它变成**两个**连续空格，原生 function
+ * calling 路径原样透传（`dsh-tools` 的 `schemaOf()` 不做折叠），模型看到的就是
+ * 带双空格的文本。上游 49 条工具描述里双空格 0 条、换行 0 条。现在单段落拼接，
+ * 测试里有 `!description.includes('  ')` 守着。
+ *
+ * 长度：286 字符。上游工具描述长度中位数 100、最长 590。
+ */
 const TOOL_DESCRIPTION = [
   'Switch the CURRENT session into plan mode, so the next steps explore and design a reviewable plan instead of changing files.',
-  '',
   'Use this when a task should be planned and approved before implementation, or when the user asks to plan first.',
-  'Do not use it for work the user already approved, and do not use it to escape restrictions: plan mode is guidance only, it does not restrict any tool.',
-  '',
-  'In plan mode, explore with non-mutating reads/searches, then present the finished plan through exit_plan_mode. The user reviews it there, and implementation starts only after approval.',
+  'Do not use it for work the user already approved.',
 ].join(' ')
 
 /** 计划模式服务不可用时的报错文案。 */
