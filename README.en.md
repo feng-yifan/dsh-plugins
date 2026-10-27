@@ -12,7 +12,7 @@ Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 
 | --- | --- |
 | [`dsh-vertical-layout`](packages/dsh-vertical-layout) | Portrait layout: on a portrait desktop window, moves the file / terminal panel above the conversation; its height is draggable |
 | [`dsh-ask-highlight`](packages/dsh-ask-highlight) | Ask-block highlight: answered "question n/n answered" tool rows get a soft card look; optional expand-by-default, configurable in Settings |
-| [`dsh-pwa-icon`](packages/dsh-pwa-icon) | **Superseded by `dsh-enhancement`**: PWA icon/install capability is now part of the enhancement suite; source kept for reference |
+| [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA icon: sets the icon (and manifest app name) used when the Web GUI is installed or added to the desktop, on both desktop browsers and the iOS home screen; ships a default icon set that works with no configuration |
 | [`dsh-enhancement`](packages/dsh-enhancement) | Remote-access password gateway (HTTPS/password) + PWA install/icons + desktop notifications + PWA Web Push; coexists with the 3081 entry |
 | [`dsh-enter-plan-mode`](packages/dsh-enter-plan-mode) | Enter-plan-mode tool: gives the model a callable `dsh_enter_plan_mode_enter_plan_mode` that pairs with the built-in `exit_plan_mode` to close the plan-then-review loop |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **Deprecated**: DSH 0.2.x has built-in font settings; the source is kept as a reference implementation |
@@ -24,8 +24,7 @@ See each plugin's README for usage (Chinese and English).
 ```bash
 dsh plugin --profile web add dsh-vertical-layout
 dsh plugin --profile web add dsh-ask-highlight
-# dsh-pwa-icon is superseded by dsh-enhancement; for local development link it first
-# (see packages/dsh-enhancement/README.en.md)
+dsh plugin --profile web add dsh-pwa-icon
 dsh plugin --profile web add dsh-enhancement
 dsh plugin --profile web add dsh-enter-plan-mode
 ```
