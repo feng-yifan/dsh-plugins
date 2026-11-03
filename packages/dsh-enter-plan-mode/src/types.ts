@@ -65,9 +65,3 @@ export interface HostContextLike {
   get(name: string): unknown
   effect?(callback: () => void | (() => void), label?: string): unknown
 }
-
-/** 工具执行上下文（`exec`）中本插件用到的切片。 */
-export interface ToolExecutionContextLike {
-  /** 发起本次调用的 agent；没有它就没有可切换的会话。 */
-  agent?: unknown
-}

@@ -11,11 +11,13 @@
       "default": "./lib/index.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "src",
+    "locale",
     "cordis.patch.yml",
     "README.md",
     "README.en.md"
@@ -23,6 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "verify": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
     "test": "node --test test/enter-plan-mode.test.mjs",
     "prepare": "npm run build"
   },

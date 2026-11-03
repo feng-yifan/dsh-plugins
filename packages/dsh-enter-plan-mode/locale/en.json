@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Enter plan mode",
+    "description": "Give the model a callable enter-plan-mode tool that switches the current session into plan mode (explore and submit a reviewable plan), pairing with the built-in exit_plan_mode."
+  }
+}
