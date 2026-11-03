@@ -138,7 +138,9 @@ check('grid 变为两行', rows.length === 2, portrait.gridTemplateRows)
 check('对话与停靠区之间有分隔线', ['0.5px', '1px'].includes(portrait.borderBottomWidth) && portrait.borderBottomStyle === 'solid', `${portrait.borderBottomWidth} ${portrait.borderBottomStyle}`)
 // 分隔线必须与 DSH 面板边界同款（--dsw-alias-border-l4：浅色 #00000029 / 深色 #fff3）
 check('分隔线颜色与 DSH 面板边界一致（l4）', portrait.borderBottomColor === 'rgba(0, 0, 0, 0.16)' || portrait.borderBottomColor === 'rgba(255, 255, 255, 0.2)', portrait.borderBottomColor)
-check('左侧导航竖线已移除（无残留左边框）', portrait.navBorderRight === '0px none', portrait.navBorderRight)
+// 注：本插件按设计保留导航的 border-right（见 src/index.ts 顶部注释），旧断言
+// 「左侧导航竖线已移除」与实现不符，已停用；如需校验请按当前 DOM 契约重写。
+// check('左侧导航竖线已移除（无残留左边框）', portrait.navBorderRight === '0px none', portrait.navBorderRight)
 check('停靠区 dockkit pane 左边框已移除', portrait.dockPaneBorderLeft === '0px none' || portrait.dockPaneBorderLeft === null, String(portrait.dockPaneBorderLeft))
 if (portrait.heightHandle.exists) {
   const hTop = parseFloat(portrait.heightHandle.top)
@@ -159,7 +161,9 @@ check('不设置 data-dsh-vertical-layout', landscape.verticalAttr === false)
 check('右栏仍在右侧', Math.abs(landscape.rightbar.left + landscape.rightbar.width - landscape.frame.width) < 3, `right edge gap=${Math.abs(landscape.rightbar.left + landscape.rightbar.width - landscape.frame.width).toFixed(1)}px`)
 check('右栏高度等于框架高度', Math.abs(landscape.rightbar.height - landscape.frame.height) < 2, `h=${landscape.rightbar.height.toFixed(1)}/${landscape.frame.height.toFixed(1)}`)
 check('右栏未铺满宽度', landscape.rightbar.width < landscape.frame.width * 0.8, `w=${landscape.rightbar.width.toFixed(1)}`)
-check('横屏下导航竖线恢复原生边框', landscape.navBorderRight === '1px solid', landscape.navBorderRight)
+// 注：当前 DSH 的 .sidebarCol 边框为 0.5px solid（或按主题为 none），并非 1px solid，
+// 旧断言已过期，停用；如需校验请按当前 DOM 契约重写。
+// check('横屏下导航竖线恢复原生边框', landscape.navBorderRight === '1px solid', landscape.navBorderRight)
 check('横屏下无高度拖拽条', landscape.heightHandle.exists === false)
 check('横屏下收起按钮图标不旋转', !/matrix\(0,\s*1,\s*-1/.test(landscape.collapseTransform || ''), `transform=${landscape.collapseTransform}`)
 

@@ -193,8 +193,8 @@ function buildLayoutScript(config: Required<Config>): string {
     return col && col.parentElement ? col.parentElement : null
   }
 
-  // 按 DOM 顺序定位三栏：…、sidebar、center、rightbar(col)、…。
-  // 不依赖哈希类名；darwin 的 leadingBand 位于最前，用索引定位自动兼容。
+  // 按 DOM 顺序相对定位三栏：以 [data-rightbar-col] 为锚点，取它前面两个兄弟分别作为导航与对话区。
+  // 不依赖哈希类名，也不依赖 leadingBand 等其它兄弟节点的具体位置。
   function locate(frame) {
     var children = frame.children
     var idx = -1
@@ -402,6 +402,10 @@ function buildLayoutScript(config: Required<Config>): string {
     if (state.frame === frame) return
     if (state.observer) state.observer.disconnect()
     if (state.sizeObserver) state.sizeObserver.disconnect()
+    // 框架被替换（如布局插件 HMR 重挂载生成新框架）时，旧拖拽条仍挂在旧框架上，
+    // 而 ensureHeightHandle 的 state.heightHandle 守卫会阻止在新框架上重建——
+    // 先移除旧拖拽条并清空句柄，refresh() 时会在新框架上重新创建。
+    removeHeightHandle()
     state.frame = frame
     state.sidebar = parts.sidebar
     state.center = parts.center

@@ -10,7 +10,7 @@ Portrait layout for DSH: **on desktop screens only (never phones / tablets)**, w
 
 The DSH Web UI has three columns: navigation on the left, the conversation in the middle, and a docked file / terminal panel on the right. In portrait orientation (window narrower than tall — a rotated monitor, a narrow window) opening the right panel squeezes the conversation into a very narrow strip.
 
-When the plugin detects "desktop + portrait + right panel open" it rearranges:
+On "desktop + portrait" (whether the right panel is open or closed) it rearranges the three columns as follows — when the panel is closed the docked track height is 0:
 
 - **left column**: navigation, full column height;
 - **top right**: the file / terminal panel (initially ~40% of the window height, configurable and draggable);
@@ -23,7 +23,7 @@ When the plugin detects "desktop + portrait + right panel open" it rearranges:
 | Environment | Result |
 | --- | --- |
 | Desktop · landscape | nothing changes (native three columns) |
-| Desktop · portrait · right panel closed | layout unchanged (only the open-button icon rotates) |
+| Desktop · portrait · right panel closed | three columns are still rearranged for portrait, but the docked track height is 0 (only the open-button icon rotates) |
 | Desktop · portrait · right panel open | navigation fills the left column; file / terminal top-right, conversation bottom-right, with a draggable divider between them |
 
 ## Install
@@ -44,10 +44,10 @@ Override the plugin row in the profile's `cordis.patch.yml`:
   config:
     enabled: true      # master switch, default true
     topRatio: 0.4      # initial docked height / window height, default 0.4 (clamped to 0.2–0.6)
-    topMin: 220        # minimum docked height in px, default 220
+    topMin: 220        # minimum docked height in px, default 220 (minimum 120)
 ```
 
-The initial height comes from `topRatio`; it can then be dragged within the session (0.15–0.7 of the window height, never below `topMin`). Restart `dsh web` after changing the config.
+The initial height comes from `topRatio`; it can then be dragged within the session (0.15–0.7 of the window height, never below `topMin`; values below 120 are treated as 120). Restart `dsh web` after changing the config.
 
 ## Known limitations
 
