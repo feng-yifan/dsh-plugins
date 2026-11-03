@@ -124,7 +124,7 @@ export class ConfigStore {
           updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : nowIso(),
         }
       } catch {
-        /* 坏文件：用种子配置覆盖，保留可用性 */
+        /* 坏文件：本轮内存回落种子配置（不写盘），保留可用性 */
       }
     }
     return { version: 1, config: seed, updatedAt: nowIso() }

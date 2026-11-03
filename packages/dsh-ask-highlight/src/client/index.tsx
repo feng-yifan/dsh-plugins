@@ -97,7 +97,7 @@ const styles = {
     padding: '6px 8px',
     borderRadius: 8,
   },
-  error: { color: 'var(--dsw-alias-state-danger-primary, #d92d20)', fontSize: 12, lineHeight: 1.5 },
+  error: { color: 'var(--dsw-alias-state-error-primary, #d92d20)', fontSize: 12, lineHeight: 1.5 },
   success: { color: 'var(--dsw-alias-state-success-primary, #079455)', fontSize: 12, lineHeight: 1.5 },
 }
 
