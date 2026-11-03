@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "PWA icon",
+    "description": "Replace the app icon used when installing or adding the Web GUI to the desktop, by overriding the manifest icons and injecting an apple-touch-icon."
+  }
+}

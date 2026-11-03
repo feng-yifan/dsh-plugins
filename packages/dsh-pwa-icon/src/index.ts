@@ -167,7 +167,9 @@ function defaultManifest(startUrl: string): Record<string, unknown> {
     short_name: 'DSH',
     start_url: startUrl,
     scope: startUrl,
-    display: 'fullscreen',
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: '#ffffff',
   }
 }
 
@@ -254,12 +256,25 @@ const LINK_TAG = /<link\b[^>]*>/gi
 /** 属性名前必须是空白，故 `data-rel=` 不会被当作 `rel=`。 */
 const REL_ATTRIBUTE = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i
 
+/** 取出该 `<link>` 标签的 rel 属性 token 列表（小写）。 */
+function relTokens(tag: string): string[] {
+  const match = REL_ATTRIBUTE.exec(tag)
+  if (match === null) return []
+  const value = match[1] ?? match[2] ?? match[3] ?? ''
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => token.toLowerCase())
+}
+
 /** 该 `<link>` 标签的 rel 是否含 `manifest` token。 */
 function isManifestLink(tag: string): boolean {
-  const match = REL_ATTRIBUTE.exec(tag)
-  if (match === null) return false
-  const value = match[1] ?? match[2] ?? match[3] ?? ''
-  return value.split(/\s+/).some((token) => token.toLowerCase() === 'manifest')
+  return relTokens(tag).includes('manifest')
+}
+
+/** 该 `<link>` 标签的 rel 是否含 `apple-touch-icon` token。 */
+function isAppleTouchIconLink(tag: string): boolean {
+  return relTokens(tag).includes('apple-touch-icon')
 }
 
 /** 把一个值放进双引号 HTML 属性。 */
@@ -273,13 +288,37 @@ function escapeAttribute(value: string): string {
 
 /**
  * 去掉页面原有的 manifest 链接并注入本插件的一份（保证只有一条，且指向本插件路由）。
+ * 保留此入口仅为兼容既有调用；apple-touch-icon 的处理见 {@link rewriteHeadLinks}。
  * @param html - 原始 index.html。
  * @param href - 本插件的 manifest URL。
  * @returns 变换后的 index.html。
  */
 export function replaceManifestLink(html: string, href: string): string {
-  const stripped = html.replace(LINK_TAG, (tag) => (isManifestLink(tag) ? '' : tag))
-  const markup = `<link rel="manifest" href="${escapeAttribute(href)}">`
+  return rewriteHeadLinks(html, href)
+}
+
+/**
+ * 重写 head 里由浏览器取用的链接：先剥掉页面原有的同类 `<link>`，再注入唯一一条指向本插件路由。
+ *
+ * 为什么必须「先剥再插」：DSH 前端 dist 的 index.html 自带
+ * `<link rel="manifest">` 与 `<link rel="apple-touch-icon">` 各一条；若只追加，
+ * head 里会出现重复的 apple-touch-icon（iOS 取哪条不确定）。结构化注入行在
+ * `tapIndex` 之前应用，所以这里统一在 tap 里收口才能保证「有且仅有一条」。
+ *
+ * @param html - 原始 index.html。
+ * @param manifestHref - 本插件的 manifest URL。
+ * @param appleTouchHref - 若提供，替换现有的 apple-touch-icon 并注入本插件的一份；省略则不动现有 apple-touch-icon。
+ * @returns 变换后的 index.html。
+ */
+export function rewriteHeadLinks(html: string, manifestHref: string, appleTouchHref?: string): string {
+  let stripped = html.replace(LINK_TAG, (tag) => (isManifestLink(tag) ? '' : tag))
+  if (appleTouchHref !== undefined) {
+    stripped = stripped.replace(LINK_TAG, (tag) => (isAppleTouchIconLink(tag) ? '' : tag))
+  }
+  let markup = `<link rel="manifest" href="${escapeAttribute(manifestHref)}">`
+  if (appleTouchHref !== undefined) {
+    markup += `<link rel="apple-touch-icon" href="${escapeAttribute(appleTouchHref)}">`
+  }
   const close = /<\/head\s*>/i.exec(stripped)
   if (close !== null) return `${stripped.slice(0, close.index)}${markup}${stripped.slice(close.index)}`
   const open = /<head(?:\s[^>]*)?>/i.exec(stripped)
@@ -536,20 +575,10 @@ export function apply(ctx: HostContext, rawConfig?: Config): void {
     'pwa-icon: manifest route',
   )
 
-  // iOS「添加到主屏幕」用 apple-touch-icon；结构化注入行即可表达。
-  if (appleTouchHref !== undefined) {
-    ctx.on('webserver/index-inject', (table) => {
-      table.push({
-        kind: 'html',
-        placement: 'head',
-        html: `<link rel="apple-touch-icon" href="${escapeAttribute(appleTouchHref)}">`,
-      })
-    })
-  }
-
-  // 页面原有的 manifest 链接改指向本插件路由（只保留一条）。
+  // 在 tapIndex 里同时重写 manifest 与 apple-touch-icon：先剥离页面原有的同类
+  // <link>，再各注入唯一一条指向本插件路由，避免与 DSH dist 自带的 apple-touch-icon 重复。
   ctx.effect(
-    () => ctx.webServer.tapIndex((html) => replaceManifestLink(html, manifestHref)),
-    'pwa-icon: manifest link rewrite',
+    () => ctx.webServer.tapIndex((html) => rewriteHeadLinks(html, manifestHref, appleTouchHref)),
+    'pwa-icon: head link rewrite',
   )
 }
