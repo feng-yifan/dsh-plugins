@@ -31,7 +31,8 @@
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
     "verify": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "prepare": "npm run build",
-    "test": "node --test test/session-header.test.mjs"
+    "pretest": "npm run build",
+    "test": "node --test test/session-header.test.mjs test/gateway-auth.test.mjs"
   },
   "dsh": {
     "bundle": {
@@ -40,7 +41,6 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-workspace"
       ],
       "immediately": true

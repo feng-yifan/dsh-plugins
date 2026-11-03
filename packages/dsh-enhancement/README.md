@@ -95,6 +95,7 @@ DSH 只在直连官方 DeepSeek API 时发送 `x-deepseek-harness-session-id`；
 ## 手机推送
 
 - 使用标准 Web Push，每台设备单独订阅。
+- **需要先启用 PWA**：Service Worker（`/sw.js`）由 PWA 提供，PWA 关闭时无法订阅。
 - 在设置里点“订阅本设备”，浏览器会请求通知权限；权限必须由你主动点击触发。
 - iOS / iPadOS 需要 16.4 或更高版本，并且必须先把 DSH 添加到主屏幕；Safari 普通标签页收不到推送。
 - 可以随时取消订阅，或发送一条测试推送确认链路正常。

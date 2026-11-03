@@ -12,6 +12,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { createServer as createHttpsServer } from 'node:https'
 import { connect as netConnect, type Socket } from 'node:net'
 import { URL } from 'node:url'
+import { dirname } from 'node:path'
 import {
   SESSION_COOKIE,
   StateStore,
@@ -78,7 +79,9 @@ function parseCookies(header: string | undefined): Array<[string, string]> {
 
 function safeNext(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//')) return '/'
-  if (/[\r\n]/.test(raw)) return '/'
+  // 反斜杠在 URL 解析中会被归一成斜杠（`/\evil.com` → `//evil.com`），构成开放重定向；
+  // 编码形式 %5c 同理，一并拒绝。CRLF 用于防响应拆分。
+  if (/[\r\n\\]/.test(raw) || /%5c|%2f%2f/i.test(raw)) return '/'
   return raw
 }
 
@@ -213,8 +216,7 @@ export class Gateway {
     }
     this.dshSecret = await readDshSecret(this.ctx)
     if (!this.dshSecret) {
-      this.log('warn', '无法读取 DSH 浏览器会话签名密钥；会在后台重试（网关自身仍可登录）')
-      this.scheduleDshSecretRetry()
+      this.log('warn', '无法读取 DSH 浏览器会话签名密钥；启动后会在后台重试（网关自身仍可登录）')
     }
     const handler = (req: IncomingMessage, res: ServerResponse): void => {
       void this.handleRequest(req, res).catch((err: unknown) => {
@@ -256,6 +258,9 @@ export class Gateway {
       server.listen(config.port, config.bindHost, () => {
         server.off('error', onError)
         this.started = true
+        // 监听成功（started=true）后才安排密钥重试：此前的 scheduleDshSecretRetry
+        // 会因守卫 !this.started 直接返回，导致重试从不发生。
+        if (!this.dshSecret) this.scheduleDshSecretRetry()
         this.log('info', `gateway listening on ${this.secure ? 'https' : 'http'}://${formatHost(config.bindHost)}:${config.port}`)
         resolve()
       })
@@ -322,7 +327,7 @@ export class Gateway {
       dshOrigin: origin,
       dshAccessUrl,
       interfaces,
-      stateDir: this.store.statePath.replace(/\/state\.json$/, ''),
+      stateDir: dirname(this.store.statePath),
       statePath: this.store.statePath,
       error: this.error,
       https: tlsStatus(config, this.ctx.webServer.host),

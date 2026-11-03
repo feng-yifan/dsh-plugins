@@ -278,7 +278,15 @@ export class StateStore {
           updatedAt: nowIso(),
         }
       } catch {
-        /* fall through to a fresh state; keep a warning via caller */
+        // 解析失败不能静默清空：先把损坏文件改名备份，再回落默认状态，避免用户
+        // 的密码哈希 / VAPID / 推送订阅被无提示地覆盖丢失。
+        try {
+          const backup = `${this.statePath}.corrupt-${Date.now()}`
+          renameSync(this.statePath, backup)
+          console.warn(`[dsh-enhancement] state.json 无法解析，已备份到 ${backup} 并以默认配置继续`)
+        } catch {
+          /* 备份失败也不阻塞启动 */
+        }
       }
     }
     const config = defaultConfig(this.webServerHost)
@@ -404,7 +412,7 @@ export function verifySession(secret: string, value: string | undefined): Sessio
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionPayload
-    if (payload.v !== 1 || typeof payload.exp !== 'number' || typeof payload.exp !== 'number') return null
+    if (payload.v !== 1 || typeof payload.sid !== 'string' || typeof payload.iat !== 'number' || typeof payload.exp !== 'number') return null
     if (payload.exp <= Date.now()) return null
     return payload
   } catch {

@@ -159,7 +159,7 @@ const styles: Record<string, React.CSSProperties> = {
   muted: { color: 'var(--dsw-alias-label-secondary, #667085)', fontSize: 12, lineHeight: 1.6 },
   card: { borderTop: '1px solid var(--dsw-alias-border-l4, rgba(0,0,0,.08))', padding: '16px 0 8px', display: 'flex', flexDirection: 'column', gap: 6, background: 'transparent' },
   blockHead: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
-  dirty: { flex: 'none', fontSize: 11, lineHeight: '18px', padding: '1px 8px', borderRadius: 999, color: 'var(--dsw-alias-state-warning-primary, #b54708)', background: 'var(--dsw-alias-state-warning-bg, rgba(247,144,9,.12))', border: '.5px solid var(--dsw-alias-state-warning-primary-a30, rgba(181,71,8,.3))' },
+  dirty: { flex: 'none', fontSize: 11, lineHeight: '18px', padding: '1px 8px', borderRadius: 999, color: 'var(--dsw-alias-state-warn-primary, #b54708)', background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary, #b54708) 12%, transparent)', border: '.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary, #b54708) 30%, transparent)' },
   subhead: { margin: '14px 0 2px', fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary, inherit)' },
   row: { display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 0' },
   label: { color: 'var(--dsw-alias-label-primary, inherit)', fontSize: 13, fontWeight: 500 },
@@ -170,12 +170,12 @@ const styles: Record<string, React.CSSProperties> = {
   actions: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingTop: 4 },
   button: { height: 32, padding: '0 14px', borderRadius: 'var(--dsw-radius-md, 12px)', border: '.5px solid var(--dsw-alias-border-l4, rgba(0,0,0,.16))', background: 'transparent', color: 'var(--dsw-alias-label-primary, inherit)', cursor: 'pointer', fontSize: 13 },
   primary: { background: 'var(--dsw-alias-state-business-primary, #4d8dff)', borderColor: 'transparent', color: '#fff', fontWeight: 600 },
-  danger: { color: 'var(--dsw-alias-state-danger-primary, #d92d20)' },
+  danger: { color: 'var(--dsw-alias-state-error-primary, #d92d20)' },
   pill: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, border: '.5px solid var(--dsw-alias-border-l4, rgba(0,0,0,.16))', fontSize: 11, color: 'var(--dsw-alias-label-secondary, #667085)' },
   dot: { width: 7, height: 7, borderRadius: 999, background: '#54d18a', display: 'inline-block' },
   dotOff: { width: 7, height: 7, borderRadius: 999, background: '#98a2b3', display: 'inline-block' },
   code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, wordBreak: 'break-all', background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,.04))', color: 'var(--dsw-alias-label-secondary, #475467)', padding: '6px 8px', borderRadius: 8 },
-  error: { color: 'var(--dsw-alias-state-danger-primary, #d92d20)', fontSize: 12, lineHeight: 1.5 },
+  error: { color: 'var(--dsw-alias-state-error-primary, #d92d20)', fontSize: 12, lineHeight: 1.5 },
   success: { color: 'var(--dsw-alias-state-success-primary, #079455)', fontSize: 12, lineHeight: 1.5 },
   divider: { height: 1, background: 'var(--dsw-alias-border-l4, rgba(0,0,0,.08))', margin: '6px 0' },
 }
@@ -192,7 +192,7 @@ function Row(props: { label: string; children: React.ReactNode }): React.ReactEl
 
 const CARD_CSS = `
 .enh-root input:not([type="checkbox"]):not([type="file"]), .enh-root select { transition:border-color .15s, box-shadow .15s; }
-.enh-root input:not([type="checkbox"]):not([type="file"]):focus, .enh-root input:not([type="checkbox"]):not([type="file"]):focus-visible, .enh-root select:focus, .enh-root select:focus-visible { outline:none !important; border-color:var(--dsw-alias-state-business-primary, #4d8dff) !important; box-shadow:0 0 0 3px var(--dsw-alias-state-business-primary-a10, rgba(77,141,255,.18)) !important; }
+.enh-root input:not([type="checkbox"]):not([type="file"]):focus, .enh-root input:not([type="checkbox"]):not([type="file"]):focus-visible, .enh-root select:focus, .enh-root select:focus-visible { outline:none !important; border-color:var(--dsw-alias-state-business-primary, #4d8dff) !important; box-shadow:0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4d8dff) 18%, transparent) !important; }
 .enh-root select { appearance:none; background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23667085' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px !important; }
 .enh-root input[type="file"] { font-size:12px; color:var(--dsw-alias-label-secondary, #475467); max-width:100%; }
 .enh-root input[type="file"]::file-selector-button { appearance:none; height:32px; margin-right:10px; padding:0 14px; border-radius:var(--dsw-radius-md, 12px); border:.5px solid var(--dsw-alias-border-l4, rgba(0,0,0,.16)); background:var(--dsw-alias-bg-layer-3, #fff); color:var(--dsw-alias-label-primary, inherit); font:inherit; font-size:13px; cursor:pointer; }
@@ -206,7 +206,7 @@ const CARD_CSS = `
 .enh-root input[type="checkbox"]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary, #4d8dff); outline-offset:2px; }
 
 .enh-root .enh-block-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-.enh-root .enh-dirty { flex:none; font-size:11px; line-height:18px; padding:1px 8px; border-radius:999px; color:var(--dsw-alias-state-warning-primary, #b54708); background:var(--dsw-alias-state-warning-bg, rgba(247,144,9,.12)); border:.5px solid var(--dsw-alias-state-warning-primary-a30, rgba(181,71,8,.3)); }
+.enh-root .enh-dirty { flex:none; font-size:11px; line-height:18px; padding:1px 8px; border-radius:999px; color:var(--dsw-alias-state-warn-primary, #b54708); background:color-mix(in srgb, var(--dsw-alias-state-warn-primary, #b54708) 12%, transparent); border:.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary, #b54708) 30%, transparent); }
 .enh-root .enh-subhead { margin:14px 0 2px; font-size:13px; font-weight:600; color:var(--dsw-alias-label-primary, inherit); }
 .enh-root .enh-grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 16px; }
 .enh-root .enh-grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px 16px; }
@@ -625,6 +625,9 @@ function Card(): React.ReactElement {
   const enablePush = () => run(async () => {
     if (!window.isSecureContext) throw new Error('Web Push 需要 HTTPS（或 localhost）；请先启用 HTTPS')
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('当前浏览器不支持 Web Push')
+    // /sw.js 仅在启用 PWA 时注册；PWA 关闭时 Service Worker 不可用，Web Push 无从订阅。
+    const swProbe = await fetch('/sw.js', { method: 'HEAD', cache: 'no-store' }).catch(() => undefined)
+    if (!swProbe || !swProbe.ok) throw new Error('Web Push 需要先启用 PWA（PWA 关闭时 Service Worker /sw.js 不可用）')
     if (!pushPublicKey) throw new Error('VAPID 公钥尚未生成，请刷新状态后重试')
     let permission = Notification.permission
     if (permission === 'default') permission = await Notification.requestPermission()
@@ -1210,7 +1213,7 @@ function connectFocusEvents(ctx: ClientContext): (() => void) | undefined {
   }
 }
 
-function openSessionFromQuery(ctx: ClientContext): void {
+function openSessionFromQuery(ctx: ClientContext): () => void {
   const read = () => {
     try {
       const url = new URL(location.href)
@@ -1223,20 +1226,29 @@ function openSessionFromQuery(ctx: ClientContext): void {
       /* ignore */
     }
   }
+  const onMessage = (event: MessageEvent) => {
+    const data = event.data as { type?: string; sessionId?: string } | undefined
+    if (data?.type === 'dsh-enhancement-open-session' && data.sessionId && SESSION_ID_PATTERN.test(data.sessionId)) openSession(ctx, data.sessionId)
+  }
   read()
   window.addEventListener('popstate', read)
   try {
-    navigator.serviceWorker?.addEventListener('message', (event) => {
-      const data = event.data as { type?: string; sessionId?: string } | undefined
-      if (data?.type === 'dsh-enhancement-open-session' && data.sessionId && SESSION_ID_PATTERN.test(data.sessionId)) openSession(ctx, data.sessionId)
-    })
+    navigator.serviceWorker?.addEventListener('message', onMessage)
   } catch {
     /* service worker unavailable on HTTP */
+  }
+  return () => {
+    window.removeEventListener('popstate', read)
+    try {
+      navigator.serviceWorker?.removeEventListener('message', onMessage)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
 export function apply(ctx: ClientContext): void {
-  openSessionFromQuery(ctx)
+  ctx.effect(() => openSessionFromQuery(ctx), 'dsh-enhancement: open session from query')
   ctx.effect(() => connectFocusEvents(ctx), 'dsh-enhancement: focus existing page')
   ctx.effect(() => {
     return ctx.slots.inject('plugins.bundle.config', () =>

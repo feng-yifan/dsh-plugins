@@ -94,6 +94,7 @@ Clicking a desktop notification opens the matching session. On Linux and Windows
 ## Mobile push
 
 - Standard Web Push with one subscription per device.
+- **PWA must be enabled first**: the Service Worker (`/sw.js`) is served by the PWA feature, so push cannot be subscribed while PWA is off.
 - Click “Subscribe this device” in settings; the browser asks for notification permission, which must be triggered by your click.
 - iOS / iPadOS 16.4+ is required, and DSH must be added to the Home Screen; regular Safari tabs cannot receive push.
 - Unsubscribe at any time, or send a test push to verify the setup.
