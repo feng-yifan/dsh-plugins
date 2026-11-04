@@ -98,6 +98,24 @@ export function smaller(px: number): string {
   return `calc(var(--dsh-content-font-size, 14px) - ${px}px)`
 }
 
+/** 媒体查询钩子（内联样式写不了 @media）。SSR/无 matchMedia 环境返回 false。 */
+export function useMediaQuery(query: string): boolean {
+  const get = React.useCallback((): boolean => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    return window.matchMedia(query).matches
+  }, [query])
+  const subscribe = React.useCallback(
+    (listener: () => void) => {
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => undefined
+      const media = window.matchMedia(query)
+      media.addEventListener('change', listener)
+      return () => media.removeEventListener('change', listener)
+    },
+    [query],
+  )
+  return React.useSyncExternalStore(subscribe, get, get)
+}
+
 /** 极简 hover 状态（内联样式写不了 :hover）。 */
 export function useHover(): [boolean, { onMouseEnter: () => void; onMouseLeave: () => void }] {
   const [hovered, setHovered] = React.useState(false)

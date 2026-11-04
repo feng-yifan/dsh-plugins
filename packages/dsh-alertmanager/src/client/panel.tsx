@@ -36,6 +36,7 @@ import {
   TextInput,
   tokens,
   useHover,
+  useMediaQuery,
 } from './pieces'
 import type { TagTone } from './pieces'
 import type {
@@ -367,6 +368,7 @@ export function AlertCard({
   onToggle,
   onToggleExpand,
 }: AlertCardProps): React.ReactElement {
+  const narrow = useMediaQuery('(max-width: 480px)')
   const [hovered, setHovered] = React.useState(false)
   const [overflowing, setOverflowing] = React.useState(false)
   const cardRef = React.useRef<HTMLDivElement | null>(null)
@@ -438,10 +440,19 @@ export function AlertCard({
           display: 'flex',
           flexDirection: 'column',
           gap: space.sm,
-          padding: space.md,
+          padding: narrow ? space.sm + 2 : space.md,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, minWidth: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            columnGap: space.sm,
+            rowGap: space.xs + 2,
+            flexWrap: 'wrap',
+            minWidth: 0,
+          }}
+        >
           <button
             type="button"
             role="checkbox"
@@ -470,7 +481,7 @@ export function AlertCard({
             <CheckCircle selected={selected} size={18} />
           </button>
           <Tag tone="outline" title={t('card.instance.title', { name: alert.instanceName })}>
-            <span style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ maxWidth: 'min(150px, 42vw)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {alert.instanceName}
             </span>
           </Tag>
@@ -483,6 +494,7 @@ export function AlertCard({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              flex: '1 1 120px',
               minWidth: 0,
             }}
           >
@@ -543,7 +555,7 @@ export function AlertCard({
           {alert.summary || alert.description || t('card.summaryEmpty')}
         </div>
 
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, overflow: 'hidden' }}>
           <LabelChips labels={alert.labels} wrap={false} t={t} measureRef={labelsRef} />
         </div>
 
@@ -1149,6 +1161,8 @@ function EmptyCard({
 export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactElement {
   const { t } = props
   useLocaleRevision(props.locale)
+  /** 窄屏（手机）布局开关。 */
+  const narrow = useMediaQuery('(max-width: 480px)')
 
   // 单一数据来源：store（侧栏入口与面板共享同一份状态）。
   const storeState = React.useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot)
@@ -1336,7 +1350,7 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
       ? phase === 'loading' || refreshing
         ? t('refresh.waiting')
         : t('refresh.never')
-      : t('refresh.status', {
+      : t(narrow ? 'refresh.statusShort' : 'refresh.status', {
           time: formatClock(lastRefreshAt || payload.fetchedAt),
           instances: payload.instances.length,
           alerts: payload.alerts.length,
@@ -1367,20 +1381,30 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
       style={{
         flex: 'none',
         display: 'flex',
-        alignItems: 'flex-start',
+        flexDirection: narrow ? 'column' : 'row',
+        alignItems: narrow ? 'stretch' : 'flex-start',
         justifyContent: 'space-between',
-        gap: space.md,
-        padding: `${space.md}px ${space.lg}px`,
+        flexWrap: 'wrap',
+        gap: narrow ? space.sm : space.md,
+        padding: `${space.md}px ${narrow ? space.md : space.lg}px`,
         borderBottom: `1px solid ${rule}`,
       }}
     >
-      <div style={{ minWidth: 0 }}>
+      <div style={{ flex: narrow ? '0 0 auto' : '1 1 240px', minWidth: 0 }}>
         <div
           role="group"
           aria-label={t('filter.aria.severity')}
           style={{ display: 'flex', alignItems: 'center', columnGap: space.sm, rowGap: space.xs + 2, flexWrap: 'wrap' }}
         >
-          <h1 style={{ margin: 0, fontSize: bigger(4), fontWeight: 600, lineHeight: 1.4, color: tokens.labelPrimary }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: narrow ? bigger(2) : bigger(4),
+              fontWeight: 600,
+              lineHeight: 1.4,
+              color: tokens.labelPrimary,
+            }}
+          >
             {t('panel.title')}
           </h1>
           {severityFilter === 'all' ? null : (
@@ -1419,14 +1443,31 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
         <div
           role="status"
           aria-live="polite"
-          style={{ marginTop: space.xs, fontSize: tokens.fontBase, lineHeight: 1.6, color: tokens.labelSecondary }}
+          style={{
+            marginTop: space.xs,
+            fontSize: tokens.fontBase,
+            lineHeight: 1.6,
+            color: tokens.labelSecondary,
+            wordBreak: 'keep-all',
+            overflowWrap: 'normal',
+          }}
         >
           {statusText}
           {cancelled ? ` · ${t('refresh.cancelled')}` : ''}
           {phase === 'ready' && storeState.errorCode !== '' ? ` · ${t('refresh.errorHint')}` : ''}
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flex: 'none' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: space.sm,
+          flex: narrow ? '1 1 auto' : '0 1 auto',
+          flexWrap: 'wrap',
+          justifyContent: narrow ? 'flex-start' : 'flex-end',
+          minWidth: 0,
+        }}
+      >
         <RefreshControl
           refreshing={refreshing}
           intervalKey={intervalKey}
@@ -1460,7 +1501,7 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
         flex: 'none',
         borderTop: `1px solid ${rule}`,
         background: tokens.bgLayer1,
-        padding: `${space.md}px ${space.lg}px`,
+        padding: `${space.md}px ${narrow ? space.md : space.lg}px`,
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
@@ -1473,7 +1514,15 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
             {actionError}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: space.md, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: narrow ? 'column' : 'row',
+            alignItems: narrow ? 'stretch' : 'center',
+            gap: narrow ? space.sm : space.md,
+            flexWrap: 'wrap',
+          }}
+        >
           <span style={{ fontSize: 'var(--dsh-content-font-size, 14px)', color: tokens.labelSecondary, flex: 'none' }}>
             {t('dispatch.selected', { count: selected.size })}
           </span>
@@ -1499,7 +1548,8 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
                 disabled={dispatching || workspaces.length === 0}
                 style={{
                   ...secondaryButtonStyle,
-                  maxWidth: 280,
+                  maxWidth: '100%',
+                  minWidth: 0,
                   color: workspaces.length === 0 ? tokens.labelSecondary : tokens.labelPrimary,
                   cursor: dispatching || workspaces.length === 0 ? 'not-allowed' : 'pointer',
                 }}
@@ -1519,7 +1569,11 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
           <button
             type="button"
             aria-label={t('dispatch.aria.submit')}
-            style={{ ...primaryButtonStyle(!canDispatch || dispatching), marginLeft: 'auto' }}
+            style={{
+              ...primaryButtonStyle(!canDispatch || dispatching),
+              marginLeft: narrow ? 0 : 'auto',
+              width: narrow ? '100%' : undefined,
+            }}
             disabled={!canDispatch || dispatching}
             onClick={() => void dispatch()}
           >
@@ -1587,7 +1641,7 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
         <div
           style={{
             flex: 'none',
-            padding: `${space.md}px ${space.lg}px`,
+            padding: `${space.md}px ${narrow ? space.md : space.lg}px`,
             borderBottom: `1px solid ${rule}`,
           }}
         >
@@ -1647,7 +1701,7 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <div style={{ padding: space.lg, boxSizing: 'border-box' }}>
+          <div style={{ padding: narrow ? space.md : space.lg, boxSizing: 'border-box' }}>
             {failedInstances.length === 0 ? null : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: space.sm, marginBottom: space.md }}>
                 {failedInstances.map((instance) => (
@@ -1743,7 +1797,7 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 460px), 1fr))',
                   alignItems: 'start',
                   gap: 12,
                 }}
