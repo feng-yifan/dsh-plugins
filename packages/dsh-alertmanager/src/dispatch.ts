@@ -1,44 +1,55 @@
 /**
- * dsh-alertmanager · 派发
+ * dsh-alertmanager · 派发（多实例）
  *
  * 把面板里选中的告警变成“在新会话里立即开始的一轮工作”：
- * 校验 → 解析工作区 → 重新拉最新告警 → 生成 prompt → 新建会话 →
+ * 校验 → 解析工作区 → 按实例分组并行拉最新告警 → 生成 prompt → 新建会话 →
  * 尽力改标题 → 发送首条用户消息（mode: queue）并立即开始运行。
  *
+ * 单实例不可达不阻断派发：prompt 里单列说明，其余实例的告警照常处理。
  * 依赖全部可注入，测试无需真实宿主。
  */
 import { randomUUID } from 'node:crypto'
-import type { AlertsPayload, Alert } from './alertmanager.js'
-import { buildPrompt } from './prompt.js'
-import type { SettingsPayload } from './settings.js'
-import type {
-  LoggerLike,
-  SessionControllerLike,
-  WorkspaceRegistryLike,
-} from './types.js'
+import type { Alert, InstanceAlertData } from './alertmanager.js'
+import { buildPrompt, type PromptMissingAlert, type PromptUnavailableInstance } from './prompt.js'
+import type { InstanceSettings, SettingsPayload } from './settings.js'
+import type { LoggerLike, SessionControllerLike, WorkspaceRegistryLike } from './types.js'
 
-/** 一次派发最多处理的告警条数。 */
-export const MAX_DISPATCH_ALERTS = 20
+export type DispatchErrorCode =
+  | 'dispatch.invalid'
+  | 'dispatch.workspace-not-found'
+  | 'dispatch.alerts-unavailable'
+  | 'dispatch.create-failed'
+  | 'dispatch.prompt-failed'
+  | 'alerts.not-configured'
+  | 'session.unavailable'
 
-/** 派发失败；`status` 供 HTTP 路由映射，`sessionId` 在会话已创建后携带。 */
+/** 派发失败；`status`/`code` 供 HTTP 路由映射，`sessionId` 在会话已创建后携带。 */
 export class DispatchError extends Error {
   readonly status: number
+  readonly code: DispatchErrorCode
   readonly sessionId?: string
 
-  constructor(message: string, status = 400, sessionId?: string) {
+  constructor(message: string, status = 400, code: DispatchErrorCode = 'dispatch.invalid', sessionId?: string) {
     super(message)
     this.name = 'DispatchError'
     this.status = status
+    this.code = code
     this.sessionId = sessionId
   }
 }
 
+/** 一条选中项。 */
+export interface DispatchSelection {
+  instanceId: string
+  fingerprint: string
+}
+
 /** 派发依赖。 */
 export interface DispatchDeps {
-  /** 当前设置；未配置 url 时给出可读 400。 */
+  /** 当前设置；没有实例时给出可读 400。 */
   settings: SettingsPayload | undefined
-  /** 重新拉取最新告警（必须绕过面板列表的缓存）。 */
-  fetchAlerts: () => Promise<AlertsPayload>
+  /** 拉取单个实例的最新告警（实现里必须绕过面板缓存，即 fresh）。 */
+  fetchInstance: (instance: InstanceSettings) => Promise<InstanceAlertData>
   /** 会话服务；缺失时返回 503「当前 profile 不支持创建会话」。 */
   sessionController?: SessionControllerLike
   /** 工作区注册表；缺失时只跳过路径解析。 */
@@ -71,19 +82,23 @@ export function buildSessionTitle(firstName: string, count: number): string {
   return `${characters.slice(0, 59).join('')}…`
 }
 
-function normalizeFingerprints(value: unknown): string[] {
-  if (!Array.isArray(value)) throw new DispatchError('请选择 1–20 条告警')
-  if (value.length < 1 || value.length > MAX_DISPATCH_ALERTS) {
-    throw new DispatchError(`请选择 1–${MAX_DISPATCH_ALERTS} 条告警`)
-  }
-  const fingerprints: string[] = []
+function normalizeSelections(value: unknown): DispatchSelection[] {
+  if (!Array.isArray(value)) throw new DispatchError('selections 必须是数组')
+  if (value.length < 1) throw new DispatchError('请至少选择 1 条告警')
+  const seen = new Set<string>()
+  const selections: DispatchSelection[] = []
   for (const item of value) {
-    if (typeof item !== 'string' || item.trim() === '') {
-      throw new DispatchError('告警指纹必须是非空字符串')
-    }
-    fingerprints.push(item)
+    if (!isRecord(item)) throw new DispatchError('每条选择必须包含 instanceId 与 fingerprint')
+    const instanceId = typeof item.instanceId === 'string' ? item.instanceId.trim() : ''
+    if (instanceId === '') throw new DispatchError('实例 ID 必须是非空字符串')
+    const fingerprint = typeof item.fingerprint === 'string' ? item.fingerprint.trim() : ''
+    if (fingerprint === '') throw new DispatchError('告警指纹必须是非空字符串')
+    const key = JSON.stringify([instanceId, fingerprint])
+    if (seen.has(key)) continue
+    seen.add(key)
+    selections.push({ instanceId, fingerprint })
   }
-  return fingerprints
+  return selections
 }
 
 function normalizeWorkspaceId(value: unknown): string {
@@ -91,24 +106,33 @@ function normalizeWorkspaceId(value: unknown): string {
   return value.trim()
 }
 
+interface GroupOutcome {
+  instanceId: string
+  instanceName: string
+  instanceUrl: string
+  ok: boolean
+  alerts: Map<string, Alert>
+  error?: string
+}
+
 /**
  * 执行一次派发。
  *
- * @param input - 请求体：`{ fingerprints: string[], workspaceId: string }`。
+ * @param input - 请求体：`{ workspaceId, selections: [{ instanceId, fingerprint }] }`。
  * @param deps - 可注入依赖。
  * @returns 新会话的 id。
- * @throws {DispatchError} 校验失败、工作区不存在、缺少会话服务或 prompt 失败。
+ * @throws {DispatchError} 校验失败、工作区不存在、缺少会话服务、告警不可用或 prompt 失败。
  */
 export async function dispatchAlerts(input: unknown, deps: DispatchDeps): Promise<DispatchResult> {
   if (!isRecord(input)) throw new DispatchError('请求体必须是 JSON 对象')
-  const fingerprints = normalizeFingerprints(input.fingerprints)
+  const selections = normalizeSelections(input.selections)
   const workspaceId = normalizeWorkspaceId(input.workspaceId)
 
-  if (deps.settings === undefined || deps.settings.url === '') {
-    throw new DispatchError('尚未配置 AlertManager 地址')
+  if (deps.settings === undefined || deps.settings.instances.length === 0) {
+    throw new DispatchError('尚未配置 AlertManager 实例', 400, 'alerts.not-configured')
   }
   if (deps.sessionController === undefined) {
-    throw new DispatchError('当前 profile 不支持创建会话', 503)
+    throw new DispatchError('当前 profile 不支持创建会话', 503, 'session.unavailable')
   }
 
   // 1. 解析工作区：有注册表时必须存在；没有注册表时 prompt 里标注路径未知。
@@ -120,33 +144,113 @@ export async function dispatchAlerts(input: unknown, deps: DispatchDeps): Promis
     } catch {
       workspace = undefined
     }
-    if (workspace === undefined) throw new DispatchError('工作区不存在', 404)
+    if (workspace === undefined) throw new DispatchError('工作区不存在', 404, 'dispatch.workspace-not-found')
     if (typeof workspace.path === 'string') workspacePath = workspace.path
   }
 
-  // 2. 重新拉最新告警，按指纹选出选中项；不在列表里的记下来写进 prompt。
-  let latest: AlertsPayload
-  try {
-    latest = await deps.fetchAlerts()
-  } catch (error) {
-    throw new DispatchError(`拉取最新告警失败：${errorMessage(error)}`, 502)
+  const instancesById = new Map(deps.settings.instances.map((instance) => [instance.id, instance]))
+
+  // 2. 按涉及的实例分组、并行 fresh 拉取；单实例失败不阻断其它实例。
+  const involvedIds = [...new Set(selections.map((selection) => selection.instanceId))]
+  const outcomes = new Map<string, GroupOutcome>()
+  await Promise.all(
+    involvedIds.map(async (instanceId) => {
+      const instance = instancesById.get(instanceId)
+      if (instance === undefined) {
+        outcomes.set(instanceId, {
+          instanceId,
+          instanceName: instanceId,
+          instanceUrl: '',
+          ok: false,
+          alerts: new Map(),
+          error: '实例已不存在',
+        })
+        return
+      }
+      try {
+        const data = await deps.fetchInstance(instance)
+        const alerts = new Map<string, Alert>()
+        for (const alert of data.alerts) {
+          if (!alerts.has(alert.fingerprint)) alerts.set(alert.fingerprint, alert)
+        }
+        outcomes.set(instanceId, {
+          instanceId,
+          instanceName: instance.name,
+          instanceUrl: instance.url,
+          ok: true,
+          alerts,
+        })
+      } catch (error) {
+        outcomes.set(instanceId, {
+          instanceId,
+          instanceName: instance.name,
+          instanceUrl: instance.url,
+          ok: false,
+          alerts: new Map(),
+          error: errorMessage(error),
+        })
+      }
+    }),
+  )
+
+  // 3. 匹配 fingerprint，并把取不到的选择分门别类写进 prompt。
+  const matched: Array<Alert & { instanceId: string; instanceName: string; instanceUrl: string }> = []
+  const missing: PromptMissingAlert[] = []
+  const unavailable: PromptUnavailableInstance[] = []
+  const unavailableByInstance = new Map<string, { instanceName: string; url: string; fingerprints: string[] }>()
+  for (const selection of selections) {
+    const outcome = outcomes.get(selection.instanceId)
+    if (outcome === undefined) {
+      const item = unavailableByInstance.get(selection.instanceId) ?? {
+        instanceName: selection.instanceId,
+        url: '',
+        fingerprints: [],
+      }
+      item.fingerprints.push(selection.fingerprint)
+      unavailableByInstance.set(selection.instanceId, item)
+      continue
+    }
+    if (!outcome.ok) {
+      const item = unavailableByInstance.get(selection.instanceId) ?? {
+        instanceName: outcome.instanceName,
+        url: outcome.instanceUrl,
+        fingerprints: [],
+      }
+      item.fingerprints.push(selection.fingerprint)
+      unavailableByInstance.set(selection.instanceId, item)
+      continue
+    }
+    const alert = outcome.alerts.get(selection.fingerprint)
+    if (alert === undefined) {
+      missing.push({ instanceName: outcome.instanceName, fingerprint: selection.fingerprint })
+      continue
+    }
+    matched.push({
+      ...alert,
+      instanceId: outcome.instanceId,
+      instanceName: outcome.instanceName,
+      instanceUrl: outcome.instanceUrl,
+    })
   }
-  const byFingerprint = new Map<string, Alert>()
-  for (const alert of latest.alerts) {
-    if (!byFingerprint.has(alert.fingerprint)) byFingerprint.set(alert.fingerprint, alert)
-  }
-  const selected: Alert[] = []
-  const missing: string[] = []
-  for (const fingerprint of fingerprints) {
-    const alert = byFingerprint.get(fingerprint)
-    if (alert === undefined) missing.push(fingerprint)
-    else selected.push(alert)
+  unavailable.push(...unavailableByInstance.values())
+
+  if (matched.length === 0) {
+    throw new DispatchError('选中的告警都已不可用（已恢复或实例不可达）', 502, 'dispatch.alerts-unavailable')
   }
 
-  // 3. 生成 prompt。
-  const prompt = buildPrompt(selected, { workspacePath, missingFingerprints: missing })
+  // 4. 生成 prompt（按实例分组）。
+  const prompt = buildPrompt(matched, {
+    workspacePath,
+    instances: deps.settings.instances.map((instance) => ({
+      id: instance.id,
+      name: instance.name,
+      url: instance.url,
+    })),
+    missing,
+    unavailable,
+  })
 
-  // 4. 新建会话。
+  // 5. 新建会话。
   let sessionId: string
   try {
     const created = await deps.sessionController.create({ workspaceId })
@@ -155,18 +259,18 @@ export async function dispatchAlerts(input: unknown, deps: DispatchDeps): Promis
     }
     sessionId = created.sessionId
   } catch (error) {
-    throw new DispatchError(`新建会话失败：${errorMessage(error)}`, 502)
+    throw new DispatchError(`新建会话失败：${errorMessage(error)}`, 502, 'dispatch.create-failed')
   }
 
-  // 5. 改标题：尽力而为，失败只记日志。
-  const title = buildSessionTitle(selected[0]?.name ?? '', fingerprints.length)
+  // 6. 改标题：尽力而为，失败只记日志。
+  const title = buildSessionTitle(matched[0]?.name ?? '', selections.length)
   try {
     await deps.sessionController.rename?.({ sessionId, title })
   } catch (error) {
     deps.logger?.warn?.('[dsh-alertmanager] 重命名会话失败', errorMessage(error))
   }
 
-  // 6. 写入首条用户消息并立即开始运行；失败时把 sessionId 带回前端。
+  // 7. 写入首条用户消息并立即开始运行；失败时把 sessionId 带回前端。
   try {
     await deps.sessionController.prompt(
       {
@@ -178,7 +282,12 @@ export async function dispatchAlerts(input: unknown, deps: DispatchDeps): Promis
       AbortSignal.timeout(15_000),
     )
   } catch (error) {
-    throw new DispatchError(`会话已创建，但发送首条消息失败：${errorMessage(error)}`, 502, sessionId)
+    throw new DispatchError(
+      `会话已创建，但发送首条消息失败：${errorMessage(error)}`,
+      502,
+      'dispatch.prompt-failed',
+      sessionId,
+    )
   }
 
   return { sessionId }

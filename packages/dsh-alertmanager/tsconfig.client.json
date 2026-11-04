@@ -13,11 +13,11 @@
     "forceConsistentCasingInFileNames": true,
     "noEmitOnError": true,
     "outDir": ".client-build",
-    "rootDir": "src/client",
+    "rootDir": "src",
     "paths": {
       "react": ["./node_modules/@types/react/index.d.ts"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"]
     }
   },
-  "include": ["src/client"]
+  "include": ["src/client", "src/locales.ts"]
 }

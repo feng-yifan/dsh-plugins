@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "AlertManager 告警",
-    "description": "读取 AlertManager v2 实时告警；多选后在指定 DSH 工作区新建会话，让 agent 立即开始处理。"
+    "description": "多实例读取 AlertManager v2 实时告警并聚合；多选后在指定 DSH 工作区新建会话，让 agent 立即开始处理。"
   }
 }

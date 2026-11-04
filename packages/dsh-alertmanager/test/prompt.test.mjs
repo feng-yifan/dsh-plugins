@@ -66,16 +66,58 @@ test('状态文案区分活跃 / 静默 / 抑制 / 未处理', () => {
   assert.equal(alertStateLabel(alert({ state: 'unprocessed' })), '未处理')
 })
 
-test('工作区路径未知与已恢复告警都会写进 prompt', () => {
-  const prompt = buildPrompt([alert()], { missingFingerprints: ['gone-1'] })
-  assert.match(prompt, /路径未知/)
-  assert.match(prompt, /选中了 2 条告警/)
-  assert.match(prompt, /派发时已不在告警列表的告警/)
-  assert.match(prompt, /可能已恢复/)
-  assert.match(prompt, /gone-1/)
+test('按实例分组：标题含实例名与 URL，告警块用三级标题', () => {
+  const prompt = buildPrompt(
+    [
+      alert({ instanceId: 'a', instanceName: '生产', instanceUrl: 'https://am-a.example' }),
+      alert({
+        fingerprint: 'fp-b',
+        name: 'DiskFull',
+        instanceId: 'b',
+        instanceName: '测试',
+        instanceUrl: 'https://am-b.example',
+      }),
+    ],
+    { workspacePath: '/srv/app' },
+  )
+  assert.match(prompt, /## 实例：生产（https:\/\/am-a\.example）/)
+  assert.match(prompt, /## 实例：测试（https:\/\/am-b\.example）/)
+  assert.match(prompt, /### 告警 1\/2/)
+  assert.match(prompt, /### 告警 2\/2/)
+  assert.match(prompt, /HighCPU/)
+  assert.match(prompt, /DiskFull/)
 })
 
-test('超长时先丢描述再截断，且总长不超过 20000', () => {
+test('实例名/URL 可从 options.instances 按 instanceId 补全', () => {
+  const prompt = buildPrompt([alert({ instanceId: 'a' })], {
+    workspacePath: '/srv/app',
+    instances: [{ id: 'a', name: '生产', url: 'https://am-a.example' }],
+  })
+  assert.match(prompt, /## 实例：生产（https:\/\/am-a\.example）/)
+})
+
+test('不可达实例与已恢复告警分别单列', () => {
+  const prompt = buildPrompt([alert({ instanceId: 'a', instanceName: '生产', instanceUrl: 'https://am-a.example' })], {
+    workspacePath: '/srv/app',
+    missing: [{ instanceName: '生产', fingerprint: 'gone-1' }],
+    unavailable: [
+      { instanceName: '测试', url: 'https://am-b.example', fingerprints: ['fp-b', 'fp-b2'] },
+    ],
+  })
+  assert.match(prompt, /选中了 4 条告警/)
+  assert.match(prompt, /## 派发时不可达的实例/)
+  assert.match(prompt, /实例 测试（https:\/\/am-b\.example） 当时不可达，其选中告警未包含：fp-b、fp-b2/)
+  assert.match(prompt, /## 派发时已不在告警列表的告警/)
+  assert.match(prompt, /生产 \/ 指纹：gone-1/)
+})
+
+test('v1 兼容：只有 missingFingerprints 时仍能写已恢复说明', () => {
+  const prompt = buildPrompt([alert()], { missingFingerprints: ['gone-1'] })
+  assert.match(prompt, /选中了 2 条告警/)
+  assert.match(prompt, /- 指纹：gone-1/)
+})
+
+test('超长时先丢描述再裁剪，且总长不超过 20000', () => {
   const longDescription = buildPrompt([alert({ description: 'x'.repeat(30_000) })], {
     workspacePath: '/srv/app',
   })
@@ -87,6 +129,9 @@ test('超长时先丢描述再截断，且总长不超过 20000', () => {
     alert({
       fingerprint: `fp-${index}`,
       name: `Alert-${index}`,
+      instanceId: `i-${index % 3}`,
+      instanceName: `实例-${index % 3}`,
+      instanceUrl: `https://am-${index % 3}.example`,
       summary: 's'.repeat(1_500),
       description: 'd'.repeat(5_000),
     }),
@@ -96,4 +141,18 @@ test('超长时先丢描述再截断，且总长不超过 20000', () => {
   assert.match(truncated, /已截断 \d+ 条告警的详情/)
   assert.match(truncated, /受 20000 字符上限限制/)
   assert.equal(truncated.includes('描述：'), false)
+})
+
+test('工作区路径与实例信息有长度上限，但总长仍守 20000', () => {
+  const prompt = buildPrompt(
+    [
+      alert({
+        instanceName: 'n'.repeat(1000),
+        instanceUrl: `https://am.example/${'u'.repeat(1000)}`,
+      }),
+    ],
+    { workspacePath: '/'.repeat(5000) },
+  )
+  assert.ok(prompt.length <= MAX_PROMPT_CHARS)
+  assert.match(prompt, /## 实例：/)
 })

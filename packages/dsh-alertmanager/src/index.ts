@@ -1,17 +1,18 @@
 /**
  * dsh-alertmanager host half.
  *
- * 在 DSH Web 服务器上挂四个同源路由：
+ * 在 DSH Web 服务器上挂四个同源路由（同一 exact path 一个 handler 内分流 method）：
  *   GET  /_dsh/alertmanager/settings  读设置（不含 secret）
- *   POST /_dsh/alertmanager/settings  保存设置
- *   GET  /_dsh/alertmanager/alerts    拉取并归一化实时告警
- *   POST /_dsh/alertmanager/dispatch  在指定工作区新建会话并派发告警
+ *   POST /_dsh/alertmanager/settings  全量保存设置
+ *   GET  /_dsh/alertmanager/alerts    并行拉取全部实例并聚合
+ *   POST /_dsh/alertmanager/dispatch  在指定工作区新建会话并派发选中告警
  *
  * 设置存 DSH 凭据服务；其它宿主服务（connection / sessionController /
  * workspaceRegistry）都按需惰性获取，缺失时返回可读 503，不让插件激活失败。
+ * 所有错误响应都带稳定 `code`，`error` 保留中文兜底。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { AlertmanagerError, AlertmanagerSource } from './alertmanager.js'
+import { AlertmanagerAggregateError, AlertmanagerError, AlertmanagerSource } from './alertmanager.js'
 import { dispatchAlerts, DispatchError } from './dispatch.js'
 import { publicSettings, readSettings, saveSettings, SettingsError } from './settings.js'
 import type {
@@ -34,6 +35,16 @@ function json(res: ServerResponse, status: number, value: unknown): void {
     'x-content-type-options': 'nosniff',
   })
   res.end(JSON.stringify(value))
+}
+
+function jsonError(
+  res: ServerResponse,
+  status: number,
+  code: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): void {
+  json(res, status, { error: message, code, ...extra })
 }
 
 /** 照抄 dsh-enhancement：只有通过 Host/Origin 围栏且携带有效浏览器会话的请求才放行。 */
@@ -65,9 +76,7 @@ async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<Record
 }
 
 function credentialsOf(ctx: HostContextLike): CredentialsLike | undefined {
-  const value = ctx.get('credentials') as
-    | { readRecord?: unknown; modifyRecord?: unknown }
-    | undefined
+  const value = ctx.get('credentials') as { readRecord?: unknown; modifyRecord?: unknown } | undefined
   if (
     value === undefined ||
     typeof value.readRecord !== 'function' ||
@@ -78,28 +87,53 @@ function credentialsOf(ctx: HostContextLike): CredentialsLike | undefined {
   return value as unknown as CredentialsLike
 }
 
+function sessionControllerOf(ctx: HostContextLike): SessionControllerLike | undefined {
+  const value = ctx.get('sessionController') as SessionControllerLike | undefined
+  if (value === undefined || typeof value.create !== 'function' || typeof value.prompt !== 'function') {
+    return undefined
+  }
+  return value
+}
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
 interface ErrorResult {
   status: number
+  code: string
   message: string
   sessionId?: string
 }
 
 function classify(error: unknown): ErrorResult {
   if (error instanceof DispatchError) {
-    return { status: error.status, message: error.message, sessionId: error.sessionId }
+    return { status: error.status, code: error.code, message: error.message, sessionId: error.sessionId }
   }
-  if (error instanceof SettingsError) return { status: error.status, message: error.message }
-  if (error instanceof AlertmanagerError) return { status: error.status, message: error.message }
+  if (error instanceof SettingsError) return { status: error.status, code: error.code, message: error.message }
+  if (error instanceof AlertmanagerAggregateError) {
+    return { status: error.status, code: error.code, message: error.message }
+  }
+  if (error instanceof AlertmanagerError) return { status: error.status, code: error.code, message: error.message }
   // readJson 的解析/大小错误按客户端错误处理；其余未知错误 500。
-  if (error instanceof SyntaxError) return { status: 400, message: '请求体不是合法 JSON' }
-  if (error instanceof Error && (error.message === '请求体过大' || error.message === '请求体必须是 JSON 对象')) {
-    return { status: 400, message: error.message }
+  if (error instanceof SyntaxError) {
+    return { status: 400, code: 'request.invalid', message: '请求体不是合法 JSON' }
   }
-  return { status: 500, message: `内部错误：${messageOf(error)}` }
+  if (error instanceof Error && (error.message === '请求体过大' || error.message === '请求体必须是 JSON 对象')) {
+    return { status: 400, code: 'request.invalid', message: error.message }
+  }
+  return { status: 500, code: 'internal.error', message: `内部错误：${messageOf(error)}` }
+}
+
+/** 解析 `?fresh=1`；同时接受 `true`，便于手动调试。 */
+function wantsFresh(req: IncomingMessage): boolean {
+  try {
+    const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+    const value = requestUrl.searchParams.get('fresh')
+    return value === '1' || value === 'true'
+  } catch {
+    return false
+  }
 }
 
 export function apply(ctx: HostContextLike): void {
@@ -107,16 +141,18 @@ export function apply(ctx: HostContextLike): void {
   const disposers: Array<() => void> = []
 
   const wrap = (handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> | void) => {
-    return (req: IncomingMessage, res: ServerResponse) => {
-      void Promise.resolve(handler(req, res)).catch((error: unknown) => {
+    return (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      return Promise.resolve(handler(req, res)).catch((error: unknown) => {
         const result = classify(error)
-        ctx.logger?.warn?.('[dsh-alertmanager] request failed', result.message)
+        ctx.logger?.warn?.('[dsh-alertmanager] request failed', result.code, result.message)
         if (!res.headersSent) {
-          const payload =
-            result.sessionId === undefined
-              ? { error: result.message }
-              : { error: result.message, sessionId: result.sessionId }
-          json(res, result.status, payload)
+          jsonError(
+            res,
+            result.status,
+            result.code,
+            result.message,
+            result.sessionId === undefined ? {} : { sessionId: result.sessionId },
+          )
         } else {
           res.end()
         }
@@ -127,9 +163,11 @@ export function apply(ctx: HostContextLike): void {
   const requireAuth = (req: IncomingMessage, res: ServerResponse): boolean => {
     const rejection = authorized(ctx, req)
     if (rejection === null) return true
-    json(res, rejection, {
-      error: rejection === 503 ? 'DSH 连接服务不可用' : '需要登录后访问',
-    })
+    if (rejection === 503) {
+      jsonError(res, 503, 'connection.unavailable', 'DSH 连接服务不可用')
+    } else {
+      jsonError(res, rejection, 'auth.required', '需要登录后访问')
+    }
     return false
   }
 
@@ -142,7 +180,7 @@ export function apply(ctx: HostContextLike): void {
     if (!requireAuth(req, res)) return
     const credentials = credentialsOf(ctx)
     if (credentials === undefined) {
-      json(res, 503, { error: '凭据服务不可用，无法读写 AlertManager 设置' })
+      jsonError(res, 503, 'credentials.unavailable', '凭据服务不可用，无法读写 AlertManager 设置')
       return
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -150,7 +188,7 @@ export function apply(ctx: HostContextLike): void {
       return
     }
     if (req.method !== 'POST') {
-      json(res, 405, { error: 'method not allowed' })
+      jsonError(res, 405, 'request.method-not-allowed', 'method not allowed')
       return
     }
     const body = await readJson(req)
@@ -161,42 +199,38 @@ export function apply(ctx: HostContextLike): void {
   })
 
   add(`${PREFIX}/alerts`, async (req, res) => {
+    if (!requireAuth(req, res)) return
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      json(res, 405, { error: 'method not allowed' })
+      jsonError(res, 405, 'request.method-not-allowed', 'method not allowed')
       return
     }
-    if (!requireAuth(req, res)) return
     const credentials = credentialsOf(ctx)
     if (credentials === undefined) {
-      json(res, 503, { error: '凭据服务不可用，无法读取 AlertManager 设置' })
+      jsonError(res, 503, 'credentials.unavailable', '凭据服务不可用，无法读取 AlertManager 设置')
       return
     }
     const settings = await readSettings(credentials)
-    if (settings.url === '') {
-      json(res, 400, { error: '尚未配置 AlertManager 地址' })
+    if (settings.instances.length === 0) {
+      jsonError(res, 400, 'alerts.not-configured', '尚未配置 AlertManager 实例')
       return
     }
-    json(res, 200, await source.fetch(settings))
+    json(res, 200, await source.fetchAll(settings.instances, { fresh: wantsFresh(req) }))
   })
 
   add(`${PREFIX}/dispatch`, async (req, res) => {
+    if (!requireAuth(req, res)) return
     if (req.method !== 'POST') {
-      json(res, 405, { error: 'method not allowed' })
+      jsonError(res, 405, 'request.method-not-allowed', 'method not allowed')
       return
     }
-    if (!requireAuth(req, res)) return
     const credentials = credentialsOf(ctx)
     if (credentials === undefined) {
-      json(res, 503, { error: '凭据服务不可用，无法读取 AlertManager 设置' })
+      jsonError(res, 503, 'credentials.unavailable', '凭据服务不可用，无法读取 AlertManager 设置')
       return
     }
-    const sessionController = ctx.get('sessionController') as SessionControllerLike | undefined
-    if (
-      sessionController === undefined ||
-      typeof sessionController.create !== 'function' ||
-      typeof sessionController.prompt !== 'function'
-    ) {
-      json(res, 503, { error: '当前 profile 不支持创建会话' })
+    const sessionController = sessionControllerOf(ctx)
+    if (sessionController === undefined) {
+      jsonError(res, 503, 'session.unavailable', '当前 profile 不支持创建会话')
       return
     }
     const body = await readJson(req)
@@ -204,7 +238,7 @@ export function apply(ctx: HostContextLike): void {
     const workspaceRegistry = ctx.get('workspaceRegistry') as WorkspaceRegistryLike | undefined
     const result = await dispatchAlerts(body, {
       settings,
-      fetchAlerts: () => source.fetch(settings, { fresh: true }),
+      fetchInstance: (instance) => source.fetchInstance(instance, { fresh: true }),
       sessionController,
       workspaceRegistry,
       logger: ctx.logger,

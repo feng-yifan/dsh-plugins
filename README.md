@@ -15,7 +15,7 @@
 | [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA 图标：把 Web GUI 安装 / 添加到桌面时的应用图标换成自定义图片（桌面浏览器与 iOS 主屏幕都覆盖）；包内自带默认图标集，装完即用 |
 | [`dsh-enhancement`](packages/dsh-enhancement) | 远程安全访问网关（密码/HTTPS）+ PWA 安装/图标 + 桌面通知 + PWA Web Push；与 3081 入口共存 |
 | [`dsh-enter-plan-mode`](packages/dsh-enter-plan-mode) | 进入计划模式工具：给模型一个可调用的 `dsh_enter_plan_mode_enter_plan_mode`，配合内置的 `exit_plan_mode` 构成"先规划、后评审"的闭环 |
-| [`dsh-alertmanager`](packages/dsh-alertmanager) | AlertManager 告警面板：读取 v2 实时告警，多选后在指定工作区新建会话，让 agent 立即开始处理 |
+| [`dsh-alertmanager`](packages/dsh-alertmanager) | AlertManager 告警面板（多实例）：并行读取多个 v2 实例的实时告警并聚合，多选后在指定工作区新建会话，让 agent 立即开始处理 |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **已废弃**：DSH 0.2.x 起内置字体设置，源码仅作参考实现 |
 
 每个插件的用法见各自 README（中英双语）。

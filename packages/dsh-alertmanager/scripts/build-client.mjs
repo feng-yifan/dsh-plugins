@@ -9,7 +9,7 @@
  * 交给外层 require —— 浏览器模块表。
  */
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, posix, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -32,18 +32,12 @@ const walk = (dir) => {
 }
 walk(build)
 
-if (!modules.has('index.js')) throw new Error(`build-client: missing index.js in ${build}`)
+if (!modules.has('client/index.js')) throw new Error(`build-client: missing client/index.js in ${build}`)
 
 // 2. 相对说明符 → 表内规范键（去 ./ 与扩展名，补 .js）。
 const canonical = (spec, fromKey) => {
-  const parts = []
-  for (const seg of spec.split('/')) {
-    if (seg === '.' || seg === '') continue
-    if (seg === '..') parts.pop()
-    else parts.push(seg)
-  }
   const base = fromKey.includes('/') ? fromKey.slice(0, fromKey.lastIndexOf('/')) : ''
-  const rel = (base ? base + '/' : '') + parts.join('/')
+  const rel = posix.normalize(posix.join(base, spec))
   return rel.replace(/\.(ts|tsx|js|jsx)$/, '') + '.js'
 }
 
@@ -84,7 +78,7 @@ ${tableEntries}
       }
       return require(id);
     }
-    return __localRequire('./index.js');
+    return __localRequire('./client/index.js');
   }
 });
 `

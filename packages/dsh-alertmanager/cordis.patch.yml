@@ -1,8 +1,8 @@
 # dsh-alertmanager bundle patch：插入「告警」面板插件。
 #
-# AlertManager 地址、鉴权与刷新间隔保存在 DSH 凭据服务的
-# `dsh-alertmanager/settings` 记录里，不在 profile 的 cordis.patch.yml
-# 或本文件里写配置。
+# AlertManager 多实例列表（地址、鉴权、TLS 选项）保存在 DSH 凭据服务的
+# `dsh-alertmanager/settings` 记录里（payload v2），刷新间隔保存在浏览器
+# localStorage；这些都不在 profile 的 cordis.patch.yml 或本文件里写配置。
 - insert:
     - id: dsh-alertmanager
       name: dsh-alertmanager

@@ -4,75 +4,174 @@
 
 [简体中文](README.md) | **English**
 
-Adds an **Alerts** main panel to the DSH Web sidebar. It reads live alerts from the AlertManager HTTP API v2; select 1–20 alerts, choose a DSH Workspace, and click **Process** to create a new Session in that Workspace, set its title, send the alert context as the first user message so the agent starts working immediately, and jump to that Session.
+Adds an **AlertManager** panel to the DSH Web sidebar: it reads several AlertManager
+HTTP API v2 instances in parallel and aggregates their alerts into multi-column cards.
+Select any number of alerts, pick a DSH workspace, click “Handle” — the plugin then
+**creates a session in that workspace, sets its title, and sends the instance-grouped
+alert context as the first user message** so the agent starts working immediately;
+the UI jumps to that session.
 
 ## Features
 
-- A **Alerts** entry in the sidebar plus a dedicated main panel, without taking over the conversation area.
-- Reads AlertManager v2 `/api/v2/alerts` with active, silenced, inhibited, and unprocessed alerts.
-- Search (alert name / labels / annotations), state filter, severity dots, expandable rows with all labels, annotations, and a source link.
-- None / Basic / Bearer authentication; optionally skip TLS certificate verification for self-signed certificates.
-- Select 1–20 alerts, choose a Workspace in the sticky bar, and dispatch: create Session → rename it → write the alert context as the first message → the agent starts immediately.
-- Auto-refresh at the configured interval, plus manual refresh.
+- **Sidebar entry**: icon + “AlertManager” + severity count pills (critical / warning / info / other).
+  It loads once on mount, so **counts are visible without opening the panel**.
+- **Multiple instances**: any number of instances, each with its own name, URL, auth and TLS
+  options; fetched in parallel with per-instance failure isolation (failed instances are listed
+  above the grid and never block the others).
+- **Filters**: search (name / labels / annotations / instance) + state + severity + instance,
+  merged into **one row** of pill controls, with the current result count on the right.
+- **Cards**: the severity bar is a regular layout child (it never covers the border), followed by
+  the instance tag, name, severity/state tags, a 2-line summary and a single-line label row.
+  “Expand” appears **only when content actually overflows**; expanded content shows the generator
+  link, all labels, annotations, fingerprint and silence/inhibition sources.
+- **Selection**: clicking a card toggles selection (ignored while selecting text); the checkbox is a
+  keyboard-reachable `role="checkbox"` control; **no limit on how many alerts you select**.
+- **Refresh**: Grafana-style two states. Idle: “⟳ Refresh” + “5s ▾”. Refreshing: “◌ Cancel”, which
+  calls `AbortController.abort()` and keeps the last successful data. Intervals:
+  `off / 5s / 10s / 30s / 1m / 5m` (default 5s, persisted in `localStorage` under
+  `dsh-alertmanager:refresh`). A countdown is shown in the status line and manual refresh resets it.
+  Automatic refresh is **silent** — it never flips the button into the cancel state.
+- **State-driven**: the panel and the sidebar entry subscribe to the same store snapshot, so both
+  update the moment data arrives; there is exactly one auto-refresh timer. When there are no alerts
+  and every instance is reachable, an “all clear” success state is shown.
+- **Settings**: instance list with add/remove; name, URL, auth mode (none / Basic / Bearer),
+  username, password or token, and “ignore TLS certificate verification”; inline validation for
+  invalid/duplicate URLs and empty names. Removal is **one click with an inline Undo** (nothing is
+  persisted until Save). All dropdowns and segmented controls are hand-drawn — no native `<select>`.
+- **Theming**: colors, radii, font sizes and shadows all come from DSH CSS variables
+  (`--dsw-*` / `--dsh-*`), so the panel follows the light/dark theme and the user's font size.
+  The accent uses `--dsw-alias-state-business-primary` (light `#4176e6` / dark `#7aaaff`).
+- Chinese / English UI; every visible string goes through DSH locale; no third-party UI library.
 
 ## Install
 
-This package is not published to npm yet; install it from a local directory:
+Not published to npm yet; install from the local directory:
 
 ```bash
 dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager
 ```
 
-Restart `dsh web` after installing (a new plugin row requires recomposing the profile; for a same-version upgrade, a browser refresh is enough).
+Restart `dsh web` afterwards (a new plugin row requires recomposing the profile; upgrading the same
+version only needs a page refresh).
 
-## Configure in the panel
+## Configuration
 
-Open the **Alerts** panel in the sidebar and fill in:
+Open the **AlertManager** panel and click “AlertManager settings” in the top-right corner:
 
-| Field | Description |
+| Field | Notes |
 | --- | --- |
-| AlertManager URL | Required; an absolute `http://` or `https://` URL such as `https://alertmanager.example.com` |
-| Auth mode | None / Basic / Bearer |
+| Name | Required; defaults to the URL host for new instances (server also falls back) |
+| URL | Required, absolute `http://` or `https://`; URLs must be unique across instances |
+| Auth mode | none / Basic / Bearer (hand-drawn segmented control) |
 | Username | Basic only |
-| Password or token | Basic / Bearer only; leave blank to keep the saved value |
-| Skip TLS certificate verification | Off by default; for self-signed certificates over https |
-| Refresh interval (seconds) | 5–300, default 30 |
+| Password or token | Basic / Bearer only; leave empty to keep the stored value |
+| Ignore TLS verification | Default off; for self-signed certificates on https |
 
-Settings live in the DSH credential service (record key `dsh-alertmanager/settings`), not in the profile's `cordis.patch.yml`. Reading settings **never** returns the password/token to the browser; it only reports `hasSecret`.
+Settings are stored in the DSH credentials service (record key `dsh-alertmanager/settings`,
+payload v2) — never in the profile's `cordis.patch.yml`. Reading settings **never** returns the
+password/token to the browser, only `hasSecret`. A legacy v1 single-instance record is migrated on
+first read to an instance with `id=default`; v1's `refreshSeconds` is dropped and the refresh
+interval now lives in browser `localStorage`.
 
-## Behavior
+Saving is a **full replacement**: the posted instance list is the final list. `secret` omitted or
+empty keeps the previous value by `id`; `authMode: 'none'` clears it. **The store updates
+immediately**: removing every instance switches the panel to the “unconfigured” state, clears the
+cards and the selection, zeroes the sidebar counts and stops auto-refresh.
 
-Clicking **Process in the selected Workspace** makes the plugin:
+## Behaviour
 
-1. Fetch the latest alerts once more (bypassing the panel's 5-second cache) and match the selected fingerprints;
-2. Call `sessionController.create({ workspaceId })` to create a Session in the selected Workspace;
-3. Rename it to `告警处理：<first alertname> 等 N 条` (≤60 characters; a failure is logged but does not block);
-4. Send the generated Chinese prompt as the first user message with `mode: 'queue'`;
-5. Clear the selection, refresh alerts, and navigate to the new Session.
+Clicking “Handle” makes the plugin:
 
-**Clicking Process creates a Session and consumes one model turn immediately.** Make sure the Workspace and alerts are what you intend. The prompt asks the agent to start with read-only investigation, explain any plan before changing things, and report root cause / actions / verification / follow-ups. A single prompt is capped at 20,000 characters: descriptions are dropped first, then trailing alerts are omitted with a note at the end.
+1. validate the workspace (404 when unknown);
+2. group the selected alerts by instance and **re-fetch fresh** data in parallel (`?fresh=1`
+   bypasses the 5s cache), matching by `(instanceId, fingerprint)`;
+3. call `sessionController.create({ workspaceId })` in the chosen workspace;
+4. rename the session to `告警处理：<first alertname> 等 N 条` (≤60 chars, non-fatal on failure);
+5. send the instance-grouped Chinese prompt as the first user message with `mode: 'queue'`;
+6. clear the selection, refresh alerts and navigate to the new session.
 
-If an alert recovered and is no longer in the latest list at dispatch time, the prompt notes that it "was no longer in the alert list and may have recovered"; the remaining alerts are still processed.
+**Clicking “Handle” creates a session immediately and consumes one model turn** — double-check the
+workspace and alerts first. The prompt tells the agent to investigate read-only first, explain any
+change before applying it, and report root cause / actions / verification / follow-ups. Total prompt
+length is capped at 20,000 characters: descriptions are dropped first, then alerts are trimmed from
+the tail with a note about how many were omitted.
+
+If a selected alert has recovered and is missing from the fresh list, the prompt notes
+“not in the alert list at dispatch time, may have recovered”. If an instance was unreachable, the
+prompt lists “instance X was unreachable; its selected alerts are excluded” while other instances
+proceed normally. If none of the selected alerts can be resolved, the API returns 502 and no session
+is created.
+
+## HTTP API
+
+Three same-origin exact paths on the DSH web server (`GET`/`POST` split inside one handler), all
+guarded by `ctx.connection.requestRejection`, all responding with `cache-control: no-store`:
+
+| Method and path | Description |
+| --- | --- |
+| `GET /_dsh/alertmanager/settings` | Read settings (no secrets) |
+| `POST /_dsh/alertmanager/settings` | Replace all settings |
+| `GET /_dsh/alertmanager/alerts` | Fetch all instances in parallel; `?fresh=1` bypasses the 5s cache |
+| `POST /_dsh/alertmanager/dispatch` | Create a session in a workspace and dispatch selected alerts |
+
+Errors carry a stable `code`: `settings.invalid`, `alerts.not-configured`, `alerts.fetch-failed`,
+`dispatch.invalid`, `dispatch.workspace-not-found`, `dispatch.alerts-unavailable`,
+`dispatch.prompt-failed`, `credentials.unavailable`, `session.unavailable`, plus `auth.required` /
+`auth.gateway` / `auth.dsh` (the latter two are recognised and localized by the client). The client
+treats `alerts.not-configured` as authoritative: it clears data and enters the unconfigured state
+rather than keeping stale cards.
+
+## Code layout
+
+| Path | Responsibility |
+| --- | --- |
+| `src/index.ts` | Host plugin: registers `/settings`, `/alerts`, `/dispatch` and settings IO |
+| `src/settings.ts` | Settings model, v1→v2 migration, credential record, strict JSON payload |
+| `src/alertmanager.ts` | Multi-instance fetch, 5s per-instance cache, normalization/sorting, error classes, TLS |
+| `src/prompt.ts` / `src/dispatch.ts` | Grouped prompt generation and dispatch orchestration (create→rename→prompt) |
+| `src/store.ts` | Environment-agnostic core state machine (side effects injected; unit-testable in Node) |
+| `src/client/store.ts` | Browser adapter (same-origin fetch / localStorage / timers / visibility) + count broadcast |
+| `src/client/pieces.tsx` | Hand-drawn controls: Dropdown / Modal / Segmented / Switch / TextInput / Tag / FilterChip |
+| `src/client/panel.tsx` | Main panel and settings dialog |
+| `src/client/index.tsx` | Slot registration (`sidebar.panellist` + `main`) and sidebar pills |
+| `src/locales.ts` | Bilingual strings; `zh` is the key-set source of truth, `en` is compile-time constrained |
 
 ## Limitations
 
-- Only AlertManager HTTP API **v2** (`/api/v2/alerts`); v1 is not supported.
-- Does not support reverse-proxy Cookie login; use Basic / Bearer or allow anonymous reads.
-- One AlertManager instance per profile; multiple instances are not supported.
-- Up to 20 alerts per dispatch.
-- No silence management; the plugin only reads and dispatches alerts.
-- Disabling TLS verification applies only to this plugin's AlertManager requests, not to DSH itself.
+- AlertManager HTTP API **v2** only (`/api/v2/alerts`); v1 is not supported.
+- No reverse-proxy cookie login; use Basic / Bearer or anonymous read access.
+- No silence management — read and dispatch only; no cap on alerts per dispatch.
+- Disabling TLS verification only affects this plugin's AlertManager requests, not DSH itself.
+- The sidebar label is rendered by the DSH shell, which also uses the same value as that row's
+  `aria-label`. To show count pills the label is a React node, so that button's `aria-label`
+  degrades to `[object Object]` (visually fine, worse for screen readers; use a plain-text label if
+  that matters).
 
 ## Development
 
 ```bash
 pnpm --filter dsh-alertmanager run build    # host tsc + client tsc + client bundle
 pnpm --filter dsh-alertmanager run verify   # type-check only
-pnpm --filter dsh-alertmanager test         # node --test (tests the build output)
+pnpm --filter dsh-alertmanager test         # node --test (runs against build output)
 ```
 
-Tests use injected fake `fetch` / `sessionController` to cover auth headers, normalization, 401/timeout, settings never returning the secret, the full dispatch chain, and failure branches.
+Test coverage (76 tests): v1→v2 migration, secret keep/clear, strict JSON payload, multi-instance
+aggregation and sorting, per-instance failure isolation, per-instance cache and `fresh`, grouped
+prompt, over-length trimming, zero `endsAt`, cross-instance dispatch, workspace 404, prompt failure
+with sessionId, zh/en key-set parity, route-handler API tests with a fake ctx, plus the core store
+(counts, bootstrap, single scheduler, manual vs automatic, trailing refetch, `not-configured`
+clearing, stopping schedule after clearing settings, dispose, keeping old data on failure, cancel,
+selection semantics).
+
+> Note: `src/locales.ts` is compiled by both host and client; client output stays under
+> `src/client/**`; `src/store.ts` is shared by both. `lib/` and `.client-build/` are build output
+> and are not committed.
 
 ## Version compatibility
 
-This plugin **deliberately declares no DSH version requirement** (neither `engines.dsh` nor `@deepseek-ai/dsh-*` peers), so it is not gated. It depends on interface shapes rather than version numbers: `webServer.register()`, `ctx.get('credentials')`, `sessionController.create/rename/prompt`, `workspaceRegistry.get()`, and the client slot API. If an interface changes, it fails loudly (a readable 503/502 or a panel error state) rather than silently.
+This plugin **intentionally declares no DSH version requirement** (no `engines.dsh`, no
+`@deepseek-ai/dsh-*` peer), so it is not subject to version gating. It depends on interface shapes,
+not version numbers: `webServer.register()`, `ctx.get('credentials')`,
+`sessionController.create/rename/prompt`, `workspaceRegistry.get()`, and the client slot / locale
+APIs. If those change, it fails loudly (readable 503/502 or a panel error state) rather than
+silently.
