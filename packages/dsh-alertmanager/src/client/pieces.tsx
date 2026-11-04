@@ -319,6 +319,13 @@ export interface ModalProps {
 export function Modal({ title, closeLabel, onClose, children, footer, width = 720 }: ModalProps): React.ReactElement {
   const dialogRef = React.useRef<HTMLDivElement | null>(null)
   const titleId = React.useId()
+  /**
+   * 用 ref 持有最新的 onClose：它通常是父组件里每次渲染都新建的函数，
+   * 若直接写进 effect 依赖，弹窗内每敲一个字符都会重跑 effect ——
+   * 而 effect 会 focus 对话框容器，导致输入框失焦、文字选区被清掉。
+   */
+  const onCloseRef = React.useRef(onClose)
+  onCloseRef.current = onClose
 
   React.useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
@@ -335,12 +342,14 @@ export function Modal({ title, closeLabel, onClose, children, footer, width = 72
       ).filter((element) => element.offsetParent !== null)
     }
 
-    dialogRef.current?.focus()
+    // 只在焦点还不在对话框内时才转移焦点（避免抢走输入框的焦点/选区）。
+    const dialog = dialogRef.current
+    if (dialog !== null && !dialog.contains(document.activeElement)) dialog.focus()
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         event.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (event.key !== 'Tab') return
@@ -365,9 +374,10 @@ export function Modal({ title, closeLabel, onClose, children, footer, width = 72
     return () => {
       document.removeEventListener('keydown', onKeyDown, true)
       document.body.style.overflow = previousOverflow
-      opener?.focus()
+      if (opener !== null && document.contains(opener)) opener.focus()
     }
-  }, [onClose])
+    // 刻意只依赖挂载/卸载：onClose 走 ref，避免父组件每次渲染都重跑本 effect。
+  }, [])
 
   return (
     <div

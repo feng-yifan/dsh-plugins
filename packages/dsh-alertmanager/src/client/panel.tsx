@@ -1193,12 +1193,12 @@ export function AlertmanagerPage(props: AlertmanagerPageProps): React.ReactEleme
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
 
-  // 倒计时显示需要按秒重渲染。
+  // 倒计时显示需要按秒重渲染；设置弹窗打开时不需要（也避免无谓的整页重渲染）。
   React.useEffect(() => {
-    if (nextRefreshAt === 0) return undefined
-    const timer = window.setInterval(() => setClockTick((value) => value + 1), 500)
+    if (nextRefreshAt === 0 || settingsOpen) return undefined
+    const timer = window.setInterval(() => setClockTick((value) => value + 1), 1000)
     return () => window.clearInterval(timer)
-  }, [nextRefreshAt])
+  }, [nextRefreshAt, settingsOpen])
 
   const countdown = nextRefreshAt === 0 ? 0 : Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000))
 
