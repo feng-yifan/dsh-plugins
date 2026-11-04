@@ -41,7 +41,11 @@
 
 ## 安装
 
-本包暂未发布到 npm，用本地目录安装：
+```bash
+dsh plugin --profile web add dsh-alertmanager
+```
+
+本机开发时也可以直接装本地目录：
 
 ```bash
 dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager

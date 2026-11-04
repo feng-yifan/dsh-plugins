@@ -48,7 +48,11 @@ the UI jumps to that session.
 
 ## Install
 
-Not published to npm yet; install from the local directory:
+```bash
+dsh plugin --profile web add dsh-alertmanager
+```
+
+For local development you can also install from the directory:
 
 ```bash
 dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager

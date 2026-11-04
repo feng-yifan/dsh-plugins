@@ -28,15 +28,10 @@ dsh plugin --profile web add dsh-ask-highlight
 dsh plugin --profile web add dsh-pwa-icon
 dsh plugin --profile web add dsh-enhancement
 dsh plugin --profile web add dsh-enter-plan-mode
+dsh plugin --profile web add dsh-alertmanager
 ```
 
 插件从 npm 安装；本机 link 的插件用本地目录。需要持久配置的插件在 profile 的 `cordis.patch.yml` 里写 `config`（例如 `dsh-enhancement` 的网关/PWA 运行状态存它自己的 `state.json`，不在 profile 里放密码），具体字段见各插件 README。
-
-`dsh-alertmanager` 暂未发布到 npm，用本地目录安装：
-
-```bash
-dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager
-```
 
 改配置会自动热重载；升级插件版本后界面如果没变化，重启 `dsh web`；纯客户端样式类的插件刷新浏览器即可。
 
