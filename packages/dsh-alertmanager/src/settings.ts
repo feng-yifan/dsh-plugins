@@ -172,7 +172,18 @@ export async function saveSettings(credentials: CredentialsLike, input: unknown)
         : clampRefreshSeconds(input.refreshSeconds, current.refreshSeconds),
   }
 
-  await credentials.modifyRecord(SETTINGS_KEY, async () => ({ kind: 'grant', payload: next }))
+  // 凭据服务要求 payload 严格可 JSON 表示：显式构造不含 undefined 自有属性的对象，
+  // 否则 `authMode: 'none'`（username/secret 均为 undefined）会在保存时被拒绝。
+  const payload: SettingsPayload = {
+    url: next.url,
+    authMode: next.authMode,
+    insecureTls: next.insecureTls,
+    refreshSeconds: next.refreshSeconds,
+    ...(next.username === undefined ? {} : { username: next.username }),
+    ...(next.secret === undefined ? {} : { secret: next.secret }),
+  }
+
+  await credentials.modifyRecord(SETTINGS_KEY, async () => ({ kind: 'grant', payload }))
   return publicSettings(next)
 }
 

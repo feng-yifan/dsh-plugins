@@ -22,6 +22,19 @@ const PROCESSING_REQUIREMENTS = `## 处理要求
 2. 需要改动时先说明方案与影响面；高风险操作先确认。
 3. 处理完给出：根因、已做操作、验证结果、后续建议。`
 
+/**
+ * 判断 AlertManager v2 的 `endsAt` 是否表示「未恢复」。
+ *
+ * 未恢复告警的 `endsAt` 可能是空串，也可能是 Go 的零值时间
+ * `0001-01-01T00:00:00Z`；两者都不应渲染成 0001 年。
+ */
+export function isZeroTime(value: string): boolean {
+  if (value === '') return true
+  if (value.startsWith('0001-01-01')) return true
+  const date = new Date(value)
+  return !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 1
+}
+
 /** 把 ISO 时间写成绝对时间（UTC），无法解析时原样返回。 */
 export function formatAbsoluteTime(value: string): string {
   if (value === '') return '未知'
@@ -51,7 +64,7 @@ function renderAlert(alert: Alert, index: number, total: number, includeDescript
     `- 严重度：${alert.severity || '未知'}`,
     `- 状态：${alertStateLabel(alert)}`,
     `- 开始：${formatAbsoluteTime(alert.startsAt)}`,
-    `- 结束：${alert.endsAt === '' ? '未恢复' : formatAbsoluteTime(alert.endsAt)}`,
+    `- 结束：${isZeroTime(alert.endsAt) ? '未恢复' : formatAbsoluteTime(alert.endsAt)}`,
     `- 来源：${alert.generatorURL || '（无）'}`,
     `- 摘要：${alert.summary || '（无）'}`,
   ]

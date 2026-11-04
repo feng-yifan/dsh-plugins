@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { alertStateLabel, buildPrompt, MAX_PROMPT_CHARS } from '../lib/prompt.js'
+import { alertStateLabel, buildPrompt, isZeroTime, MAX_PROMPT_CHARS } from '../lib/prompt.js'
 
 function alert(overrides = {}) {
   return {
@@ -41,6 +41,22 @@ test('buildPrompt 包含工作区、告警字段、标签与指纹', () => {
   assert.match(prompt, /## 处理要求/)
   assert.match(prompt, /先只读排查/)
   assert.ok(prompt.length <= MAX_PROMPT_CHARS)
+})
+
+test('endsAt 为 Go 零值时间时显示未恢复，而非 0001 年', () => {
+  const zero = buildPrompt([alert({ endsAt: '0001-01-01T00:00:00Z' })], { workspacePath: '/srv/app' })
+  assert.match(zero, /- 结束：未恢复/)
+  assert.equal(zero.includes('0001-01-01'), false)
+
+  const empty = buildPrompt([alert({ endsAt: '' })], { workspacePath: '/srv/app' })
+  assert.match(empty, /- 结束：未恢复/)
+
+  const resolved = buildPrompt([alert({ endsAt: '2026-01-01T01:00:00Z' })], { workspacePath: '/srv/app' })
+  assert.match(resolved, /- 结束：2026-01-01 01:00:00 UTC/)
+
+  assert.equal(isZeroTime('0001-01-01T00:00:00Z'), true)
+  assert.equal(isZeroTime(''), true)
+  assert.equal(isZeroTime('2026-01-01T01:00:00Z'), false)
 })
 
 test('状态文案区分活跃 / 静默 / 抑制 / 未处理', () => {

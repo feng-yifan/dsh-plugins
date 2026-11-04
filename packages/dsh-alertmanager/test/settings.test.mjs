@@ -32,6 +32,53 @@ function fakeCredentials(initial) {
   return service
 }
 
+/** 递归校验值是否严格可 JSON 表示：undefined / 函数 / symbol / 非有限数字都拒绝。 */
+function assertJsonRepresentable(value, path = 'payload') {
+  if (value === null) return
+  const type = typeof value
+  if (type === 'string' || type === 'boolean') return
+  if (type === 'number') {
+    assert.ok(Number.isFinite(value), `${path} 不是有限数字`)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertJsonRepresentable(item, `${path}[${index}]`))
+    return
+  }
+  assert.equal(type, 'object', `${path} 的类型 ${type} 不可 JSON 表示`)
+  for (const key of Reflect.ownKeys(value)) {
+    assert.equal(typeof key, 'string', `${path} 含 symbol 键`)
+    assert.notEqual(value[key], undefined, `${path}.${key} 是 undefined`)
+    assertJsonRepresentable(value[key], `${path}.${key}`)
+  }
+}
+
+/** 严格校验 payload 的假凭据服务：模拟 DSH 凭据服务对 JSON 表示的要求。 */
+function strictCredentials(initial) {
+  let record = initial === undefined ? undefined : { kind: 'grant', payload: initial }
+  return {
+    async readRecord(key) {
+      assert.equal(key, SETTINGS_KEY)
+      return record
+    },
+    async modifyRecord(key, mutate) {
+      assert.equal(key, SETTINGS_KEY)
+      const next = await mutate(record)
+      assert.equal(next.kind, 'grant')
+      assertJsonRepresentable(next.payload)
+      assert.deepEqual(JSON.parse(JSON.stringify(next.payload)), next.payload)
+      for (const key of Object.keys(next.payload)) {
+        assert.notEqual(next.payload[key], undefined, `payload.${key} 是 undefined`)
+      }
+      record = next
+      return record
+    },
+    get record() {
+      return record
+    },
+  }
+}
+
 test('readSettings 无记录时返回默认值', async () => {
   const settings = await readSettings(fakeCredentials())
   assert.equal(settings.url, '')
@@ -115,6 +162,51 @@ test('authMode 为 none 时清空 secret 与 username', async () => {
   assert.equal(view.hasSecret, false)
   assert.equal(service.record.payload.secret, undefined)
   assert.equal(service.record.payload.username, undefined)
+})
+
+test('authMode 为 none 时写入的 payload 不含 undefined，可被严格 JSON 校验', async () => {
+  const service = strictCredentials()
+  const view = await saveSettings(service, {
+    url: 'http://am:9093',
+    authMode: 'none',
+    insecureTls: false,
+    refreshSeconds: 30,
+  })
+
+  assert.equal(view.hasSecret, false)
+  const payload = service.record.payload
+  assert.deepEqual(JSON.parse(JSON.stringify(payload)), payload)
+  assert.deepEqual(Object.keys(payload).sort(), ['authMode', 'insecureTls', 'refreshSeconds', 'url'])
+  assert.equal(Object.hasOwn(payload, 'username'), false)
+  assert.equal(Object.hasOwn(payload, 'secret'), false)
+  assert.equal(payload.secret, undefined)
+  assert.equal(payload.username, undefined)
+})
+
+test('basic / bearer 带字符串 secret 时写入的 payload 仍严格可 JSON 校验', async () => {
+  const service = strictCredentials()
+  const basic = await saveSettings(service, {
+    url: 'https://am.example',
+    authMode: 'basic',
+    username: 'alice',
+    secret: 's3cret',
+    refreshSeconds: 15,
+  })
+  assert.equal(basic.hasSecret, true)
+  assert.equal(service.record.payload.username, 'alice')
+  assert.equal(service.record.payload.secret, 's3cret')
+  assert.deepEqual(JSON.parse(JSON.stringify(service.record.payload)), service.record.payload)
+
+  const bearer = await saveSettings(service, {
+    url: 'https://am.example',
+    authMode: 'bearer',
+    secret: 'token-123',
+  })
+  assert.equal(bearer.hasSecret, true)
+  assert.equal(bearer.authMode, 'bearer')
+  assert.equal(service.record.payload.secret, 'token-123')
+  assert.equal(Object.hasOwn(service.record.payload, 'username'), false)
+  assert.deepEqual(JSON.parse(JSON.stringify(service.record.payload)), service.record.payload)
 })
 
 test('refreshSeconds 被夹在 5–300 秒', async () => {
