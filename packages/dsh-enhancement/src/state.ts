@@ -94,7 +94,28 @@ const SCRYPT_P = 1
 const KEY_BYTES = 64
 const SECRET_BYTES = 32
 
-export const SESSION_COOKIE = 'dsh_enhancement_session'
+/**
+ * 会话 cookie 名的前缀。实际名字会带「协议 + 端口」后缀，见 {@link sessionCookieName}。
+ * 浏览器 cookie 身份只有 (name, domain, path)、不含端口；固定名会让同机不同端口
+ * （DSH 主服务 / 本网关 / 另一个 profile 的网关）共用一份 cookie 存储而互相覆盖。
+ */
+export const SESSION_COOKIE_PREFIX = 'dsh_enhancement_session'
+
+/**
+ * 组装实例专属会话 cookie 名：https→s、http→i，后缀接端口；只用 RFC6265 token 允许的
+ * [A-Za-z0-9_-]。非法端口退回 'd'。例：dsh_enhancement_session_s3088。
+ */
+export function sessionCookieName(protocol: 'http:' | 'https:', port: number): string {
+  const scheme = protocol === 'https:' ? 's' : 'i'
+  const safePort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 'd'
+  return `${SESSION_COOKIE_PREFIX}_${scheme}${safePort}`
+}
+
+/** 升级前的固定名：仅用于「读取旧会话」和「清除残值」，新会话一律写实例专属名。 */
+export const SESSION_COOKIE_LEGACY = SESSION_COOKIE_PREFIX
+
+/** 历史调试期用过的备用固定名，一并接受与清理。 */
+export const SESSION_COOKIE_ALT = 'dsh_enhancement_sid'
 export const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh')
 
 /** 从 CLI 参数解析当前 profile；systemd 默认 web。 */
@@ -420,16 +441,10 @@ export function verifySession(secret: string, value: string | undefined): Sessio
   }
 }
 
-export function sessionCookie(value: string, days: number, secure: boolean): string {
-  const attrs = [
-    `${SESSION_COOKIE}=${value}`,
-    `Max-Age=${Math.max(1, Math.floor(days * 86400))}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Strict',
-  ]
-  if (secure) attrs.push('Secure')
-  return attrs.join('; ')
+export function sessionCookie(name: string, value: string, days: number, secure: boolean): string[] {
+  const maxAge = Math.max(1, Math.floor(days * 86400))
+  const tail = `Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
+  return [`${name}=${value}; ${tail}`]
 }
 
 /**
@@ -440,11 +455,16 @@ export function sessionCookie(value: string, days: number, secure: boolean): str
  * `/__enhancement` 等其它 path 的残值，只清 `Path=/` 清不掉它们；这些验签失败的
  * 死值会让请求携带多份同名 cookie（见 Gateway#isAuthenticated 的注释）。
  */
-export function clearSessionCookie(secure: boolean): string[] {
+export function clearSessionCookie(currentName: string, secure: boolean): string[] {
   const tail = `Max-Age=0; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
-  return ['/', '/__enhancement', '/__enhancement/login'].map(
-    (path) => `${SESSION_COOKIE}=; Path=${path}; ${tail}`,
-  )
+  const names = [...new Set([currentName, SESSION_COOKIE_LEGACY, SESSION_COOKIE_ALT])]
+  const out: string[] = []
+  for (const name of names) {
+    for (const path of ['/', '/__enhancement', '/__enhancement/login']) {
+      out.push(`${name}=; Path=${path}; ${tail}`)
+    }
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------

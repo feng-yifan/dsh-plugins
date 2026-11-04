@@ -27,6 +27,7 @@ Set a password, open the gateway URL, and log in to DSH without carrying around 
 - Choose which network interface to listen on.
 - Works with normal DSH chat, files, terminal, WebSocket, and live streams.
 - Configurable login session lifetime; changing the password invalidates all gateway sessions.
+- The gateway session cookie name is scoped by protocol and port, so multiple profiles/gateways on the same host never overwrite each other; changing the port requires logging in again.
 
 ## HTTPS
 

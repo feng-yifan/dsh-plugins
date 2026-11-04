@@ -14,7 +14,8 @@ import { connect as netConnect, type Socket } from 'node:net'
 import { URL } from 'node:url'
 import { dirname } from 'node:path'
 import {
-  SESSION_COOKIE,
+  SESSION_COOKIE_ALT,
+  SESSION_COOKIE_LEGACY,
   StateStore,
   clearSessionCookie,
   formatHost,
@@ -22,6 +23,7 @@ import {
   readDshSecret,
   requestAuthority,
   sessionCookie,
+  sessionCookieName,
   signSession,
   verifySession,
 } from './state.js'
@@ -155,6 +157,12 @@ export class Gateway {
   private dshSecretTimer: ReturnType<typeof setTimeout> | null = null
   private secure = false
   private failures = new Map<string, LoginFailure>()
+
+  /** 本实例专属会话 cookie 名（协议 + 端口）。按当前实际监听状态推导：HTTPS 起失败回落 http 时名字也须是 http 变体。 */
+  private get sessionName(): string {
+    const protocol = this.secure ? 'https:' : 'http:'
+    return sessionCookieName(protocol, this.store.config.port)
+  }
 
   constructor(
     private readonly ctx: HostContextLike,
@@ -385,8 +393,9 @@ export class Gateway {
    */
   private isAuthenticated(req: IncomingMessage): boolean {
     if (!this.store.passwordSet) return false
+    const accepted = new Set([this.sessionName, SESSION_COOKIE_LEGACY, SESSION_COOKIE_ALT])
     for (const [name, value] of parseCookies(req.headers.cookie)) {
-      if (name !== SESSION_COOKIE) continue
+      if (!accepted.has(name)) continue
       if (verifySession(this.store.gateSecret, value) !== null) return true
     }
     return false
@@ -498,7 +507,7 @@ export class Gateway {
     if (path === '/__enhancement/logout') {
       res.writeHead(303, {
         location: '/__enhancement/login',
-        'set-cookie': clearSessionCookie(this.secure),
+        'set-cookie': clearSessionCookie(this.sessionName, this.secure),
         'cache-control': 'no-store',
       })
       res.end()
@@ -606,7 +615,10 @@ export class Gateway {
     const token = signSession(this.store.gateSecret, this.store.config.sessionDays)
     res.writeHead(303, {
       location: next,
-      'set-cookie': sessionCookie(token, this.store.config.sessionDays, this.secure),
+      'set-cookie': [
+        ...clearSessionCookie(this.sessionName, this.secure),
+        ...sessionCookie(this.sessionName, token, this.store.config.sessionDays, this.secure),
+      ],
       'cache-control': 'no-store',
     })
     res.end()
