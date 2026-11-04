@@ -19,6 +19,18 @@ export const SETTINGS_VERSION = 2
 /** 支持的 AlertManager 鉴权方式。 */
 export type AuthMode = 'none' | 'basic' | 'bearer'
 
+/** 派发提示词风格：detailed = 结构化上下文；brief = 一句话 + 告警名称。 */
+export type PromptStyle = 'detailed' | 'brief'
+
+/** 简洁风格的默认引导语。 */
+export const DEFAULT_PROMPT_INTRO = '解决以下 AlertManager 告警：'
+
+/** 引导语长度上限。 */
+export const MAX_PROMPT_INTRO_CHARS = 500
+
+/** 默认提示词风格。 */
+export const DEFAULT_PROMPT_STYLE: PromptStyle = 'brief'
+
 /** 一个 AlertManager 实例的完整设置（含 secret，仅宿主内部使用）。 */
 export interface InstanceSettings {
   id: string
@@ -34,6 +46,10 @@ export interface InstanceSettings {
 export interface SettingsPayload {
   version: typeof SETTINGS_VERSION
   instances: InstanceSettings[]
+  /** 派发提示词风格。 */
+  promptStyle?: PromptStyle
+  /** 简洁模式的引导语（模型收到的第一行）。 */
+  promptIntro?: string
 }
 
 /** 面向前端的单实例视图：绝不含 secret，只暴露 `hasSecret`。 */
@@ -50,6 +66,8 @@ export interface PublicInstance {
 /** 面向前端的设置视图。 */
 export interface PublicSettings {
   instances: PublicInstance[]
+  promptStyle: PromptStyle
+  promptIntro: string
 }
 
 /** 设置校验失败；路由把它映射为 HTTP 400 + `settings.invalid`。 */
@@ -64,7 +82,28 @@ export class SettingsError extends Error {
 }
 
 /** 未配置时的默认值。 */
-export const DEFAULT_SETTINGS: SettingsPayload = { version: SETTINGS_VERSION, instances: [] }
+export const DEFAULT_SETTINGS: SettingsPayload = {
+  version: SETTINGS_VERSION,
+  instances: [],
+  promptStyle: DEFAULT_PROMPT_STYLE,
+  promptIntro: DEFAULT_PROMPT_INTRO,
+}
+
+function isPromptStyle(value: unknown): value is PromptStyle {
+  return value === 'detailed' || value === 'brief'
+}
+
+/** 读取时的容错：非法/缺失一律回落默认值；引导语去空白并截断。 */
+function normalizePromptStyle(value: unknown): PromptStyle {
+  return isPromptStyle(value) ? value : DEFAULT_PROMPT_STYLE
+}
+
+function normalizePromptIntro(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_PROMPT_INTRO
+  const text = value.trim()
+  if (text === '') return DEFAULT_PROMPT_INTRO
+  return text.slice(0, MAX_PROMPT_INTRO_CHARS)
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -155,11 +194,23 @@ export function normalizeSettings(value: unknown): SettingsPayload {
       seenIds.add(instance.id)
       instances.push(instance)
     })
-    return { version: SETTINGS_VERSION, instances }
+    return {
+      version: SETTINGS_VERSION,
+      instances,
+      promptStyle: normalizePromptStyle(source.promptStyle),
+      promptIntro: normalizePromptIntro(source.promptIntro),
+    }
   }
 
   const legacyUrl = typeof source.url === 'string' ? source.url.trim() : ''
-  if (legacyUrl === '') return { version: SETTINGS_VERSION, instances: [] }
+  if (legacyUrl === '') {
+    return {
+      version: SETTINGS_VERSION,
+      instances: [],
+      promptStyle: normalizePromptStyle(source.promptStyle),
+      promptIntro: normalizePromptIntro(source.promptIntro),
+    }
+  }
   const authMode = isAuthMode(source.authMode) ? source.authMode : 'none'
   const legacy: InstanceSettings = {
     id: 'default',
@@ -174,7 +225,12 @@ export function normalizeSettings(value: unknown): SettingsPayload {
       : {}),
     ...(source.insecureTls === true ? { insecureTls: true } : {}),
   }
-  return { version: SETTINGS_VERSION, instances: [legacy] }
+  return {
+    version: SETTINGS_VERSION,
+    instances: [legacy],
+    promptStyle: normalizePromptStyle(source.promptStyle),
+    promptIntro: normalizePromptIntro(source.promptIntro),
+  }
 }
 
 /** 读取当前设置；没有记录或记录类型不符时返回默认值。 */
@@ -196,6 +252,8 @@ export function publicSettings(settings: SettingsPayload): PublicSettings {
       hasSecret: typeof instance.secret === 'string' && instance.secret !== '',
       insecureTls: instance.insecureTls === true,
     })),
+    promptStyle: settings.promptStyle ?? DEFAULT_PROMPT_STYLE,
+    promptIntro: settings.promptIntro ?? DEFAULT_PROMPT_INTRO,
   }
 }
 
@@ -278,7 +336,24 @@ export async function saveSettings(credentials: CredentialsLike, input: unknown)
     instances.push(next)
   })
 
-  const payload: SettingsPayload = { version: SETTINGS_VERSION, instances }
+  let promptStyle: PromptStyle
+  if (input.promptStyle === undefined) promptStyle = current.promptStyle ?? DEFAULT_PROMPT_STYLE
+  else if (isPromptStyle(input.promptStyle)) promptStyle = input.promptStyle
+  else throw new SettingsError('提示词风格只能是 detailed 或 brief')
+
+  let promptIntro: string
+  if (input.promptIntro === undefined) promptIntro = current.promptIntro ?? DEFAULT_PROMPT_INTRO
+  else if (typeof input.promptIntro !== 'string') throw new SettingsError('提示词引导语必须是字符串')
+  else {
+    const text = input.promptIntro.trim()
+    if (text === '') throw new SettingsError('提示词引导语不能为空')
+    if (text.length > MAX_PROMPT_INTRO_CHARS) {
+      throw new SettingsError(`提示词引导语不能超过 ${MAX_PROMPT_INTRO_CHARS} 个字符`)
+    }
+    promptIntro = text
+  }
+
+  const payload: SettingsPayload = { version: SETTINGS_VERSION, instances, promptStyle, promptIntro }
   await credentials.modifyRecord(SETTINGS_KEY, async () => ({ kind: 'grant', payload }))
   return publicSettings(payload)
 }

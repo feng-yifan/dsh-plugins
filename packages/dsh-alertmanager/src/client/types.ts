@@ -21,8 +21,12 @@ export interface PublicInstance {
   insecureTls: boolean
 }
 
+export type PromptStyle = 'detailed' | 'brief'
+
 export interface PublicSettings {
   instances: PublicInstance[]
+  promptStyle: PromptStyle
+  promptIntro: string
 }
 
 export interface AlertItem {

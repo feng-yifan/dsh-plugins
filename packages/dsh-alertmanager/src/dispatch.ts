@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { Alert, InstanceAlertData } from './alertmanager.js'
-import { buildPrompt, type PromptMissingAlert, type PromptUnavailableInstance } from './prompt.js'
+import { buildPromptForStyle, type PromptMissingAlert, type PromptUnavailableInstance } from './prompt.js'
 import type { InstanceSettings, SettingsPayload } from './settings.js'
 import type { LoggerLike, SessionControllerLike, WorkspaceRegistryLike } from './types.js'
 
@@ -239,7 +239,8 @@ export async function dispatchAlerts(input: unknown, deps: DispatchDeps): Promis
   }
 
   // 4. 生成 prompt（按实例分组）。
-  const prompt = buildPrompt(matched, {
+  const prompt = buildPromptForStyle(deps.settings.promptStyle, matched, {
+    intro: deps.settings.promptIntro,
     workspacePath,
     instances: deps.settings.instances.map((instance) => ({
       id: instance.id,

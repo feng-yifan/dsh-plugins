@@ -47,6 +47,7 @@ import type {
   AlertmanagerPageProps,
   MergedAlert,
   PublicInstance,
+  PromptStyle,
   PublicSettings,
   StateFilter,
 } from './types'
@@ -827,11 +828,15 @@ export function SettingsDialog({
   const [error, setError] = React.useState('')
   /** 最近一次删除，可撤销（删除只是草稿级操作，保存前都能反悔）。 */
   const [undo, setUndo] = React.useState<{ draft: DraftInstance; index: number } | null>(null)
+  const [promptStyle, setPromptStyle] = React.useState<PromptStyle>(settings.promptStyle ?? 'brief')
+  const [promptIntro, setPromptIntro] = React.useState<string>(settings.promptIntro ?? '')
 
   // 弹窗打开期间 store 里的设置被别处更新时，若本地没有未保存改动则重建草稿。
   React.useEffect(() => {
     if (dirty) return
     setDrafts(toDrafts(settings))
+    setPromptStyle(settings.promptStyle ?? 'brief')
+    setPromptIntro(settings.promptIntro ?? '')
   }, [settings, dirty])
 
   const update = (id: string, patch: Partial<DraftInstance>): void => {
@@ -932,6 +937,8 @@ export function SettingsDialog({
     setError('')
     try {
       const body = {
+        promptStyle,
+        promptIntro: promptIntro.trim(),
         instances: drafts.map((draft) => ({
           id: draft.id,
           name: draft.name.trim(),
@@ -1040,7 +1047,50 @@ export function SettingsDialog({
             />
           ))
         )}
-        {error === '' ? null : (
+        <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: space.sm,
+          paddingTop: space.md,
+          borderTop: `1px solid ${rule}`,
+        }}
+      >
+        <span style={{ fontSize: tokens.fontSecondary, fontWeight: 600, color: tokens.labelSecondary }}>
+          {t('settings.promptSection')}
+        </span>
+        <Field label={t('settings.promptStyle')} hint={t('settings.promptStyleHint')}>
+          <Segmented
+            ariaLabel={t('settings.promptStyle')}
+            value={promptStyle}
+            disabled={saving}
+            options={[
+              { value: 'brief', label: t('settings.promptBrief') },
+              { value: 'detailed', label: t('settings.promptDetailed') },
+            ]}
+            onChange={(value) => {
+              setDirty(true)
+              setPromptStyle(value)
+            }}
+          />
+        </Field>
+        {promptStyle === 'brief' ? (
+          <Field label={t('settings.promptIntro')} htmlFor="dsh-alertmanager-prompt-intro" hint={t('settings.promptIntroHint')}>
+            <TextInput
+              id="dsh-alertmanager-prompt-intro"
+              value={promptIntro}
+              disabled={saving}
+              placeholder={t('settings.promptIntroPlaceholder')}
+              describedBy="dsh-alertmanager-prompt-intro-hint"
+              onChange={(value) => {
+                setDirty(true)
+                setPromptIntro(value)
+              }}
+            />
+          </Field>
+        ) : null}
+      </div>
+      {error === '' ? null : (
           <div
             role="alert"
             style={{

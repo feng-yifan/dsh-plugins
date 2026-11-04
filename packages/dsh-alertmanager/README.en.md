@@ -31,6 +31,9 @@ the UI jumps to that session.
   `off / 5s / 10s / 30s / 1m / 5m` (default 5s, persisted in `localStorage` under
   `dsh-alertmanager:refresh`). A countdown is shown in the status line and manual refresh resets it.
   Automatic refresh is **silent** — it never flips the button into the cancel state.
+- **Controllable dispatch prompt**: pick a style in settings — **Brief** (default: one intro line plus
+  the alert names, e.g. “Resolve the following AlertManager alerts:” + a name list) or **Detailed**
+  (full alert context and handling instructions). The brief intro line is editable (≤500 chars).
 - **State-driven**: the panel and the sidebar entry subscribe to the same store snapshot, so both
   update the moment data arrives; there is exactly one auto-refresh timer. When there are no alerts
   and every instance is reachable, an “all clear” success state is shown.
@@ -66,6 +69,8 @@ Open the **AlertManager** panel and click “AlertManager settings” in the top
 | Username | Basic only |
 | Password or token | Basic / Bearer only; leave empty to keep the stored value |
 | Ignore TLS verification | Default off; for self-signed certificates on https |
+| Prompt style | Brief (default) / Detailed, see “Dispatch prompt” below |
+| Intro line | Brief mode only: the first line; the plugin appends alert names automatically (≤500 chars) |
 
 Settings are stored in the DSH credentials service (record key `dsh-alertmanager/settings`,
 payload v2) — never in the profile's `cordis.patch.yml`. Reading settings **never** returns the
@@ -77,6 +82,24 @@ Saving is a **full replacement**: the posted instance list is the final list. `s
 empty keeps the previous value by `id`; `authMode: 'none'` clears it. **The store updates
 immediately**: removing every instance switches the panel to the “unconfigured” state, clears the
 cards and the selection, zeroes the sidebar counts and stops auto-refresh.
+
+## Dispatch prompt
+
+The first message sent to the agent is controlled by the “Prompt style” setting:
+
+- **Brief (default)**: intro line + deduplicated alert names, nothing else. For example:
+
+  ```
+  Resolve the following AlertManager alerts:
+  - MemoryRequestTooLow
+  - GitLabBackupStale
+  ```
+
+  If some alerts had recovered or an instance was unreachable, one short note per case is appended.
+- **Detailed**: the full structured context (workspace path, per-instance alert fields, labels,
+  annotations, fingerprint, and the “handling requirements”), capped at 20,000 characters.
+
+Both styles obey the 20,000-character cap; the intro line is capped at 500 characters.
 
 ## Behaviour
 

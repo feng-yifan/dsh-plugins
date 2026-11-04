@@ -149,6 +149,8 @@ test('GET /settings 迁移 v1，返回 hasSecret 但绝不回传 secret', async 
         insecureTls: false,
       },
     ],
+    promptStyle: 'brief',
+    promptIntro: '解决以下 AlertManager 告警：',
   })
 })
 
@@ -263,6 +265,7 @@ test('GET /alerts 单实例失败仍返回 200，全部失败返回 400 alerts.f
       const partial = makeCtx({
         initialSettings: {
           version: 2,
+          promptStyle: 'detailed',
           instances: [
             { id: 'a', name: '生产', url: 'https://am-a.example', authMode: 'none' },
             { id: 'b', name: '测试', url: 'https://am-b.example', authMode: 'none' },
@@ -368,6 +371,7 @@ test('POST /dispatch 成功：按实例 fresh 拉取、建会话并发送分组 
       const { routes } = makeCtx({
         initialSettings: {
           version: 2,
+          promptStyle: 'detailed',
           instances: [
             { id: 'a', name: '生产', url: 'https://am-a.example', authMode: 'none' },
             { id: 'b', name: '测试', url: 'https://am-b.example', authMode: 'none' },

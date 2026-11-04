@@ -261,3 +261,39 @@ export function buildPrompt(alerts: readonly PromptAlert[], options: PromptOptio
   }
   return renderPrompt([], options, alerts, false, alerts.length).slice(0, MAX_PROMPT_CHARS)
 }
+
+/** 简洁模式：一句话 + 告警名称列表（去重，保持原顺序）。 */
+export function buildBriefPrompt(
+  alerts: readonly PromptAlert[],
+  options: PromptOptions & { intro?: string } = {},
+): string {
+  const intro = (options.intro ?? '解决以下 AlertManager 告警：').trim() || '解决以下 AlertManager 告警：'
+  const seen = new Set<string>()
+  const names: string[] = []
+  for (const alert of alerts) {
+    const name = (alert.name.trim() !== '' ? alert.name.trim() : alert.fingerprint).trim()
+    if (name === '' || seen.has(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  const lines = [`${intro}`, ...names.map((name) => `- ${name}`)]
+  const notes: string[] = []
+  if (options.missing !== undefined && options.missing.length > 0) {
+    notes.push(`（另有 ${options.missing.length} 条派发时已不在告警列表，可能已恢复）`)
+  }
+  if (options.unavailable !== undefined && options.unavailable.length > 0) {
+    const list = options.unavailable.map((item) => item.instanceName).join('、')
+    notes.push(`（实例 ${list} 当时不可达，其选中告警未包含）`)
+  }
+  const text = [...lines, ...notes].join('\n')
+  return text.length <= MAX_PROMPT_CHARS ? text : text.slice(0, MAX_PROMPT_CHARS)
+}
+
+/** 按设置里的风格选择生成方式。 */
+export function buildPromptForStyle(
+  style: 'detailed' | 'brief' | undefined,
+  alerts: readonly PromptAlert[],
+  options: PromptOptions & { intro?: string } = {},
+): string {
+  return style === 'brief' ? buildBriefPrompt(alerts, options) : buildPrompt(alerts, options)
+}

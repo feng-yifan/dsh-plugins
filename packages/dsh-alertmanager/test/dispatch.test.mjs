@@ -4,6 +4,8 @@ import { dispatchAlerts, DispatchError } from '../lib/dispatch.js'
 
 const SETTINGS = {
   version: 2,
+  promptStyle: 'detailed',
+  promptIntro: '解决以下 AlertManager 告警：',
   instances: [
     { id: 'a', name: '生产', url: 'https://am-a.example', authMode: 'none' },
     { id: 'b', name: '测试', url: 'https://am-b.example', authMode: 'bearer', secret: 'token-b' },
@@ -300,4 +302,17 @@ test('rename 失败只记日志，不阻断派发', async () => {
   assert.equal(calls.prompt.length, 1)
   assert.equal(warnings.length, 1)
   assert.match(String(warnings[0][1]), /rename not supported/)
+})
+
+test('简洁模式：消息只有引导语 + 去重后的告警名称', async () => {
+  const { deps, calls } = makeDeps({
+    settings: { ...SETTINGS, promptStyle: 'brief', promptIntro: '解决以下 AlertManager 告警：' },
+  })
+  await dispatchAlerts(
+    { workspaceId: 'ws-1', selections: [selection('a', 'fp-1'), selection('b', 'fp-b')] },
+    deps,
+  )
+  const text = calls.prompt[0].request.content[0].text
+  assert.equal(text, '解决以下 AlertManager 告警：\n- HighCPU\n- DiskFull')
+  assert.doesNotMatch(text, /处理要求/)
 })

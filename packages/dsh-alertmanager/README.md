@@ -26,6 +26,9 @@
   间隔可选 `关闭 / 5s / 10s / 30s / 1m / 5m`，默认 5s，存 `localStorage`
   的 `dsh-alertmanager:refresh`；状态行显示倒计时，手动刷新会重置计时。
   自动刷新是**静默**的，不会把按钮切成取消态。
+- **派发提示词可控**：设置里可选风格 —— **简洁**（默认，一句引导语 + 告警名称，如
+  「解决以下 AlertManager 告警：」+ 名称列表）或**详细**（完整的告警上下文与处理要求）；
+  简洁模式的引导语可自定义（≤500 字符）。
 - **状态驱动**：面板与侧栏入口订阅同一个 store 快照，数据一到两者同时更新；
   全局只有一个自动刷新计时器。无告警且实例全部可达时显示「一切正常」成功态。
 - **设置**：实例列表 + 添加/删除，名称、地址、鉴权方式（无 / Basic / Bearer）、用户名、
@@ -58,6 +61,8 @@ dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plug
 | 用户名 | 仅 Basic 使用 |
 | 口令或 token | 仅 Basic / Bearer 使用；留空表示保留该实例已保存的值 |
 | 忽略 TLS 证书校验 | 默认否；自签名证书且地址是 https 时使用 |
+| 提示词风格 | 简洁（默认）/ 详细，见下文「派发提示词」 |
+| 引导语 | 仅简洁模式：消息第一行，插件随后自动列出告警名称（≤500 字符） |
 
 设置保存在 DSH 凭据服务里（记录 key `dsh-alertmanager/settings`，payload 版本 v2），
 不写 profile 的 `cordis.patch.yml`。读取设置时**不会**把口令/token 回传给浏览器，只返回 `hasSecret`。
@@ -67,6 +72,24 @@ dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plug
 保存是**全量替换**：请求里的实例列表就是最终列表；`secret` 省略或空串时按 `id` 保留旧值，
 `authMode: 'none'` 会清空 secret。**保存后 store 立即同步**：清空全部实例会马上把面板切到
 「未配置」态、清空卡片与选中项，并让侧栏数字归零、停止自动刷新。
+
+## 派发提示词
+
+派发时发给 agent 的首条消息由设置里的「提示词风格」决定：
+
+- **简洁（默认）**：引导语 + 去重后的告警名称，别无其它。例如：
+
+  ```
+  解决以下 AlertManager 告警：
+  - MemoryRequestTooLow
+  - GitLabBackupStale
+  ```
+
+  若有派发时已恢复的告警或不可达实例，末尾会各加一行简短说明。
+- **详细**：完整的结构化上下文（工作区路径、按实例分组的告警字段、标签、注解、
+  指纹，以及「处理要求」），总长上限 20000 字符。
+
+两种风格都仍受 20000 字符上限约束；引导语上限 500 字符。
 
 ## 行为
 

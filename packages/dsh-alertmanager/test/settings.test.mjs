@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  DEFAULT_PROMPT_INTRO,
+  DEFAULT_PROMPT_STYLE,
   DEFAULT_SETTINGS,
   deriveInstanceName,
   normalizeSettings,
@@ -11,6 +13,14 @@ import {
   SETTINGS_VERSION,
   SettingsError,
 } from '../lib/settings.js'
+
+/** 空设置（含提示词默认值）。 */
+const EMPTY_SETTINGS = {
+  version: SETTINGS_VERSION,
+  instances: [],
+  promptStyle: DEFAULT_PROMPT_STYLE,
+  promptIntro: DEFAULT_PROMPT_INTRO,
+}
 
 /** 最小的假凭据服务：一条 grant 记录，读写都走真实 modifyRecord 语义。 */
 function fakeCredentials(initial) {
@@ -90,8 +100,8 @@ const INSTANCE_A = {
 
 test('readSettings 无记录时返回 v2 空实例列表', async () => {
   const settings = await readSettings(fakeCredentials())
-  assert.deepEqual(settings, { version: SETTINGS_VERSION, instances: [] })
-  assert.deepEqual(DEFAULT_SETTINGS, { version: SETTINGS_VERSION, instances: [] })
+  assert.deepEqual(settings, EMPTY_SETTINGS)
+  assert.deepEqual(DEFAULT_SETTINGS, EMPTY_SETTINGS)
 })
 
 test('v1 payload 自动迁移成单实例，丢弃 refreshSeconds', async () => {
@@ -117,20 +127,17 @@ test('v1 payload 自动迁移成单实例，丢弃 refreshSeconds', async () => 
 })
 
 test('v1 空地址与无法识别的 payload 都归一为空实例列表', async () => {
-  assert.deepEqual(normalizeSettings({ url: '', authMode: 'none' }), {
-    version: 2,
-    instances: [],
-  })
-  assert.deepEqual(normalizeSettings(undefined), { version: 2, instances: [] })
-  assert.deepEqual(normalizeSettings({ hello: 'world' }), { version: 2, instances: [] })
-  assert.deepEqual(normalizeSettings('nope'), { version: 2, instances: [] })
-  assert.deepEqual(normalizeSettings({ version: 2, instances: [] }), { version: 2, instances: [] })
+  assert.deepEqual(normalizeSettings({ url: '', authMode: 'none' }), EMPTY_SETTINGS)
+  assert.deepEqual(normalizeSettings(undefined), EMPTY_SETTINGS)
+  assert.deepEqual(normalizeSettings({ hello: 'world' }), EMPTY_SETTINGS)
+  assert.deepEqual(normalizeSettings('nope'), EMPTY_SETTINGS)
+  assert.deepEqual(normalizeSettings({ version: 2, instances: [] }), EMPTY_SETTINGS)
 })
 
 test('readSettings 忽略非 grant 记录并容错非法字段', async () => {
   const service = fakeCredentials()
   service.replace({ kind: 'api-key', value: 'irrelevant' })
-  assert.deepEqual(await readSettings(service), { version: 2, instances: [] })
+  assert.deepEqual(await readSettings(service), EMPTY_SETTINGS)
 
   const odd = fakeCredentials({
     version: 2,
@@ -168,6 +175,8 @@ test('publicSettings 绝不回传 secret，只给 hasSecret', () => {
         insecureTls: true,
       },
     ],
+    promptStyle: DEFAULT_PROMPT_STYLE,
+    promptIntro: DEFAULT_PROMPT_INTRO,
   })
   assert.equal(JSON.stringify(view).includes('s3cret'), false)
 })
@@ -211,8 +220,13 @@ test('保存空数组合法，并删除旧实例', async () => {
   const service = fakeCredentials()
   await saveSettings(service, { instances: [INSTANCE_A] })
   const view = await saveSettings(service, { instances: [] })
-  assert.deepEqual(view, { instances: [] })
-  assert.deepEqual(service.record.payload, { version: 2, instances: [] })
+  assert.deepEqual(view, { instances: [], promptStyle: DEFAULT_PROMPT_STYLE, promptIntro: DEFAULT_PROMPT_INTRO })
+  assert.deepEqual(service.record.payload, {
+    version: 2,
+    instances: [],
+    promptStyle: DEFAULT_PROMPT_STYLE,
+    promptIntro: DEFAULT_PROMPT_INTRO,
+  })
 })
 
 test('删除其中一个实例时其余实例保留', async () => {
@@ -318,4 +332,43 @@ test('normalizeSettings 与 DEFAULT_SETTINGS 对空输入一致', () => {
 test('deriveInstanceName 从 URL 取 host，失败时回退', () => {
   assert.equal(deriveInstanceName('https://am.example:9093/path'), 'am.example:9093')
   assert.equal(deriveInstanceName('not a url', '回退'), '回退')
+})
+
+test('提示词设置：默认值、读取容错、保存与校验', async () => {
+  // 默认：简洁风格 + 默认引导语
+  const empty = normalizeSettings({ version: 2, instances: [] })
+  assert.equal(empty.promptStyle, 'brief')
+  assert.equal(empty.promptIntro, DEFAULT_PROMPT_INTRO)
+
+  // 读取容错：非法风格回落默认；超长引导语被截断
+  const odd = normalizeSettings({ version: 2, instances: [], promptStyle: 'weird', promptIntro: 'x'.repeat(900) })
+  assert.equal(odd.promptStyle, 'brief')
+  assert.equal(odd.promptIntro.length, 500)
+
+  // 保存：显式设置生效，并出现在 public 视图
+  const service = fakeCredentials()
+  const view = await saveSettings(service, {
+    instances: [{ id: 'a', name: 'A', url: 'https://am.example', authMode: 'none' }],
+    promptStyle: 'detailed',
+    promptIntro: '请处理：',
+  })
+  assert.equal(view.promptStyle, 'detailed')
+  assert.equal(view.promptIntro, '请处理：')
+  const reread = await readSettings(service)
+  assert.equal(reread.promptStyle, 'detailed')
+  assert.equal(reread.promptIntro, '请处理：')
+
+  // 校验：空引导语、超长引导语、非法风格都返回 400
+  await assert.rejects(
+    () => saveSettings(service, { instances: [], promptIntro: '   ' }),
+    (error) => error instanceof SettingsError,
+  )
+  await assert.rejects(
+    () => saveSettings(service, { instances: [], promptIntro: 'y'.repeat(501) }),
+    (error) => error instanceof SettingsError,
+  )
+  await assert.rejects(
+    () => saveSettings(service, { instances: [], promptStyle: 'fancy' }),
+    (error) => error instanceof SettingsError,
+  )
 })

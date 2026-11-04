@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { alertStateLabel, buildPrompt, isZeroTime, MAX_PROMPT_CHARS } from '../lib/prompt.js'
+import {
+  alertStateLabel,
+  buildBriefPrompt,
+  buildPrompt,
+  buildPromptForStyle,
+  isZeroTime,
+  MAX_PROMPT_CHARS,
+} from '../lib/prompt.js'
 
 function alert(overrides = {}) {
   return {
@@ -155,4 +162,44 @@ test('工作区路径与实例信息有长度上限，但总长仍守 20000', ()
   )
   assert.ok(prompt.length <= MAX_PROMPT_CHARS)
   assert.match(prompt, /## 实例：/)
+})
+
+test('buildBriefPrompt：引导语 + 去重名称，可附已恢复/不可达提示', () => {
+  const alerts = [
+    { fingerprint: 'f1', name: 'HighCPU', severity: 'critical', state: 'active', startsAt: '', endsAt: '', labels: {}, annotations: {} },
+    { fingerprint: 'f2', name: 'HighCPU', severity: 'warning', state: 'active', startsAt: '', endsAt: '', labels: {}, annotations: {} },
+    { fingerprint: 'f3', name: 'DiskFull', severity: 'warning', state: 'active', startsAt: '', endsAt: '', labels: {}, annotations: {} },
+  ]
+  const text = buildBriefPrompt(alerts, {
+    intro: '解决以下 AlertManager 告警：',
+    missing: [{ instanceName: 'A', fingerprint: 'gone' }],
+    unavailable: [{ instanceName: 'B', fingerprints: ['x'] }],
+  })
+  assert.equal(
+    text,
+    [
+      '解决以下 AlertManager 告警：',
+      '- HighCPU',
+      '- DiskFull',
+      '（另有 1 条派发时已不在告警列表，可能已恢复）',
+      '（实例 B 当时不可达，其选中告警未包含）',
+    ].join('\n'),
+  )
+})
+
+test('buildBriefPrompt：无名称时回落指纹；引导语为空回落默认', () => {
+  const text = buildBriefPrompt(
+    [{ fingerprint: 'abc', name: '', severity: 'info', state: 'active', startsAt: '', endsAt: '', labels: {}, annotations: {} }],
+    { intro: '   ' },
+  )
+  assert.equal(text, '解决以下 AlertManager 告警：\n- abc')
+})
+
+test('buildPromptForStyle 按风格分派', () => {
+  const alerts = [
+    { fingerprint: 'f1', name: 'HighCPU', severity: 'critical', state: 'active', startsAt: '', endsAt: '', labels: {}, annotations: {} },
+  ]
+  assert.match(buildPromptForStyle('brief', alerts, { intro: 'X：' }), /^X：\n- HighCPU$/)
+  assert.match(buildPromptForStyle('detailed', alerts, {}), /## 告警 1\/1/)
+  assert.match(buildPromptForStyle(undefined, alerts, { intro: 'Y：' }), /## 告警 1\/1/)
 })
