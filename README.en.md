@@ -15,6 +15,7 @@ Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 
 | [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA icon: sets the icon (and manifest app name) used when the Web GUI is installed or added to the desktop, on both desktop browsers and the iOS home screen; ships a default icon set that works with no configuration |
 | [`dsh-enhancement`](packages/dsh-enhancement) | Remote-access password gateway (HTTPS/password) + PWA install/icons + desktop notifications + PWA Web Push; coexists with the 3081 entry |
 | [`dsh-enter-plan-mode`](packages/dsh-enter-plan-mode) | Enter-plan-mode tool: gives the model a callable `dsh_enter_plan_mode_enter_plan_mode` that pairs with the built-in `exit_plan_mode` to close the plan-then-review loop |
+| [`dsh-alertmanager`](packages/dsh-alertmanager) | AlertManager alerts panel: reads live v2 alerts, and dispatches selected alerts into a new Session in a chosen Workspace so the agent starts immediately |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **Deprecated**: DSH 0.2.x has built-in font settings; the source is kept as a reference implementation |
 
 See each plugin's README for usage (Chinese and English).
@@ -30,6 +31,12 @@ dsh plugin --profile web add dsh-enter-plan-mode
 ```
 
 Plugins install from npm. Plugins that need configuration (for example `dsh-pwa-icon` to use your own image or app name) take a `config` block in the profile's `cordis.patch.yml`; see the plugin README for the fields.
+
+`dsh-alertmanager` is not published to npm yet; install it from a local directory:
+
+```bash
+dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager
+```
 
 Config changes hot-reload automatically; if the UI does not change after upgrading a plugin, restart `dsh web`; client-style-only plugins just need a browser refresh.
 

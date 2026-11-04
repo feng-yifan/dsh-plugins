@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AlertManager alerts",
+    "description": "Read live AlertManager v2 alerts; select several and open a new Session in a DSH Workspace so the agent starts working on them immediately."
+  }
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="24" height="24" role="img" aria-label="AlertManager alerts">
+  <path d="M12 3.25c-3.04 0-5.5 2.46-5.5 5.5v3.1c0 .86-.3 1.7-.85 2.36l-1.05 1.27c-.5.6-.07 1.52.71 1.52h13.38c.78 0 1.21-.92.71-1.52l-1.05-1.27a3.7 3.7 0 0 1-.85-2.36v-3.1c0-3.04-2.46-5.5-5.5-5.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M9.75 19.1a2.4 2.4 0 0 0 4.5 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M12 7.5v4.1" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+  <circle cx="12" cy="14.6" r="1.05" fill="currentColor"/>
+</svg>

@@ -15,6 +15,7 @@
 | [`dsh-pwa-icon`](packages/dsh-pwa-icon) | PWA 图标：把 Web GUI 安装 / 添加到桌面时的应用图标换成自定义图片（桌面浏览器与 iOS 主屏幕都覆盖）；包内自带默认图标集，装完即用 |
 | [`dsh-enhancement`](packages/dsh-enhancement) | 远程安全访问网关（密码/HTTPS）+ PWA 安装/图标 + 桌面通知 + PWA Web Push；与 3081 入口共存 |
 | [`dsh-enter-plan-mode`](packages/dsh-enter-plan-mode) | 进入计划模式工具：给模型一个可调用的 `dsh_enter_plan_mode_enter_plan_mode`，配合内置的 `exit_plan_mode` 构成"先规划、后评审"的闭环 |
+| [`dsh-alertmanager`](packages/dsh-alertmanager) | AlertManager 告警面板：读取 v2 实时告警，多选后在指定工作区新建会话，让 agent 立即开始处理 |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **已废弃**：DSH 0.2.x 起内置字体设置，源码仅作参考实现 |
 
 每个插件的用法见各自 README（中英双语）。
@@ -30,6 +31,12 @@ dsh plugin --profile web add dsh-enter-plan-mode
 ```
 
 插件从 npm 安装；本机 link 的插件用本地目录。需要持久配置的插件在 profile 的 `cordis.patch.yml` 里写 `config`（例如 `dsh-enhancement` 的网关/PWA 运行状态存它自己的 `state.json`，不在 profile 里放密码），具体字段见各插件 README。
+
+`dsh-alertmanager` 暂未发布到 npm，用本地目录安装：
+
+```bash
+dsh plugin --profile web add /home/viktor/dev/projects/github/fengyifan/dsh-plugins/packages/dsh-alertmanager
+```
 
 改配置会自动热重载；升级插件版本后界面如果没变化，重启 `dsh web`；纯客户端样式类的插件刷新浏览器即可。
 
