@@ -47,9 +47,6 @@ importers:
       dsh-vertical-layout:
         specifier: ^1.1.0
         version: 1.1.0
-      dsh-web-mobile:
-        specifier: ^3.1.0
-        version: 3.1.0(@deepseek-ai/cordis@4.0.4)(react@18.2.0)
       node-forge:
         specifier: ^1.4.0
         version: 1.4.0
@@ -287,26 +284,6 @@ packages:
     resolution: {integrity: sha512-FZTyRDBLJIs3O6vTuk5vNmTcQ8qxa4/QUzWSpQFJBm5CGpsATcg4SIEa1k6WQIy1/1naEuW/NJjUJp/SoX21DA==}
     engines: {node: '>=22.18.0'}
 
-  dsh-web-mobile@3.1.0:
-    resolution: {integrity: sha512-dvRn0p0Y54RQErNRmW8z6K7JQJpo2euuMcgTvfJtgEMUJecs9Mcg4jqUNbmHWeMyijmZMUes/IRbzopDxKIdXA==}
-    engines: {node: '>=24.0.0'}
-    peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.1
-      '@deepseek-ai/dsh-client-locale': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-conversation': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-layout': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-primitives': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-settings': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-sidebar': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-client-ui-slots': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.1.2-a <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      '@deepseek-ai/dsh-session-log-export': ^0.1.0-rc.6 || >=0.1.1-rc.0 <0.2.0 || >=0.2.0-rc.1 <0.3.0-0
-      react: ^18.2.0
-    peerDependenciesMeta:
-      '@deepseek-ai/dsh-client-ui-primitives':
-        optional: true
-      '@deepseek-ai/dsh-client-ui-slots':
-        optional: true
-
   ecdsa-sig-formatter@1.0.11:
     resolution: {integrity: sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==}
 
@@ -542,11 +519,6 @@ snapshots:
       ms: 2.1.3
 
   dsh-vertical-layout@1.1.0: {}
-
-  dsh-web-mobile@3.1.0(@deepseek-ai/cordis@4.0.4)(react@18.2.0):
-    dependencies:
-      '@deepseek-ai/cordis': 4.0.4
-      react: 18.2.0
 
   ecdsa-sig-formatter@1.0.11:
     dependencies:

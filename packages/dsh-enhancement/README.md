@@ -107,7 +107,7 @@ DSH 只在直连官方 DeepSeek API 时发送 `x-deepseek-harness-session-id`；
 dsh plugin --profile web add dsh-enhancement
 ```
 
-安装后重启 DSH Web。插件会自动带入手机布局和竖屏布局依赖，不需要再单独安装或启用它们。
+安装后重启 DSH Web。插件会自动带入竖屏布局依赖，不需要再单独安装或启用它。
 
 ## 开始使用
 

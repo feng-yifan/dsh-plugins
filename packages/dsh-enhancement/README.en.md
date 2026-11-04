@@ -106,7 +106,7 @@ Clicking a desktop notification opens the matching session. On Linux and Windows
 dsh plugin --profile web add dsh-enhancement
 ```
 
-Restart DSH Web after installation. The plugin brings in the mobile and portrait-layout dependencies automatically; do not install or enable them separately.
+Restart DSH Web after installation. The plugin brings in the portrait-layout dependency automatically; do not install or enable it separately.
 
 ## Getting started
 
