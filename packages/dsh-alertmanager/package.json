@@ -1,6 +1,6 @@
 {
   "name": "dsh-alertmanager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH AlertManager 告警面板（多实例）：并行读取多个 AlertManager v2 实例的实时告警，聚合后多选，在指定工作区新建会话让 agent 立即开始处理。",
   "type": "module",
   "main": "./lib/index.js",
