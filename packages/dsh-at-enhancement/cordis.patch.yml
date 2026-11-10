@@ -1,0 +1,11 @@
+# dsh-at-enhancement bundle patch：插入插件行。
+# 插件不改 DSH 自带的 fileReferences provider，而是在宿主侧包装它的 `list`：
+# 当补全查询是外部绝对路径（`/…`、`~`、`~/…`）时，先透传原 provider 的结果，
+# 再追加按目录逐级列出的外部文件/目录候选。
+#
+# 总开关存在当前 profile 的 state.json（见 src/state.ts），由设置页
+# （设置 → 插件 → dsh-at-enhancement）读写；这里的 config 只是首次建立
+# state.json 时的种子值。
+- insert:
+    - id: dsh-at-enhancement
+      name: dsh-at-enhancement

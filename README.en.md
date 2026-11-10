@@ -16,6 +16,7 @@ Plugins for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 
 | [`dsh-enhancement`](packages/dsh-enhancement) | Remote-access password gateway (HTTPS/password) + PWA install/icons + desktop notifications + PWA Web Push; coexists with the 3081 entry |
 | [`dsh-enter-plan-mode`](packages/dsh-enter-plan-mode) | Enter-plan-mode tool: gives the model a callable `dsh_enter_plan_mode_enter_plan_mode` that pairs with the built-in `exit_plan_mode` to close the plan-then-review loop |
 | [`dsh-alertmanager`](packages/dsh-alertmanager) | AlertManager alerts panel (multi-instance): reads live alerts from several v2 instances in parallel, aggregates them, and dispatches selected alerts into a new Session in a chosen Workspace so the agent starts immediately |
+| [`dsh-at-enhancement`](packages/dsh-at-enhancement) | External @ file references: lets @ completion browse and reference absolute-path files outside the workspace, level by level |
 | [`dsh-font-settings`](packages/dsh-font-settings) | **Deprecated**: DSH 0.2.x has built-in font settings; the source is kept as a reference implementation |
 
 See each plugin's README for usage (Chinese and English).
@@ -28,6 +29,7 @@ dsh plugin --profile web add dsh-ask-highlight
 dsh plugin --profile web add dsh-pwa-icon
 dsh plugin --profile web add dsh-enhancement
 dsh plugin --profile web add dsh-enter-plan-mode
+dsh plugin --profile web add dsh-at-enhancement
 ```
 
 Plugins install from npm. Plugins that need configuration (for example `dsh-pwa-icon` to use your own image or app name) take a `config` block in the profile's `cordis.patch.yml`; see the plugin README for the fields.

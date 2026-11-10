@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "External @ File References",
+    "description": "Let @ completion browse and reference absolute-path files outside the workspace, level by level."
+  }
+}
