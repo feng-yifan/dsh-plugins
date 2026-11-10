@@ -6,7 +6,7 @@
 
 DSH 外部 `@` 文件引用增强：让 Web GUI 输入框里的 `@` 文件补全可以**逐级浏览并引用工作区外**的任意绝对路径文件 / 目录。选中后插入绝对路径（含空格时插入 `@"..."`），模型随后用 `read` 工具按绝对路径读取。
 
-DSH 原生的 `@` 补全只列当前会话工作区（cwd）内的文件，对绝对路径查询返回空。本插件不改动 DSH 自带的 provider，只在宿主侧把 `fileReferences.list` 包一层：普通查询原样透传，外部绝对路径查询追加逐级目录列举的候选。
+DSH 原生的 `@` 补全只列当前会话工作区内的文件，对绝对路径查询返回空；启用本插件后即可逐级浏览工作区外的绝对路径。
 
 ## 安装
 
@@ -22,9 +22,9 @@ dsh plugin --profile <name> add dsh-at-enhancement
 2. 输入 `/` 或 `~/` 开始逐级浏览工作区外的文件系统：
    - `@/` → 从根目录开始；
    - `@~/` → 从家目录开始；
-   - `@/home/viktor/Documents/` → 继续逐级深入。
+   - `@/home/user/Documents/` → 继续逐级深入。
 3. 继续输入目录名 / 文件名做过滤（大小写不敏感的包含匹配）。
-4. 选择候选后插入其**绝对路径**，例如 `@/home/viktor/Documents/a.md`；路径含空格时自动写成 `@"..."`。
+4. 选择候选后插入其**绝对路径**，例如 `@/home/user/Documents/a.md`；路径含空格时自动写成 `@"..."`。
 5. 模型用 `read` 工具按绝对路径读取内容（读取不受沙箱限制）。
 
 ## 配置
@@ -54,7 +54,3 @@ $DSH_HOME/profiles/<profile>/fengyifan-dsh-at-enhancement/state.json
 - 宿主 `fileReferences` 服务缺失或形态不符时自动旁路（provider 显示 missing），原生补全不受影响。
 - 每次最多返回 20 条候选。
 - 符号链接目录按目录显示，但**不递归**展开。
-
-## 版本适配
-
-本插件不声明任何 `@deepseek-ai/dsh-*` peerDependencies，也不声明 `engines.dsh`，因此不受 DSH 版本门禁约束。

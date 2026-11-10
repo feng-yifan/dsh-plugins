@@ -6,24 +6,12 @@
 
 Portrait layout for DSH: **on desktop screens only (never phones / tablets)**, when the browser window is in portrait orientation, the three columns are rearranged into "navigation on the left + file / terminal top-right + conversation bottom-right", giving the conversation its full width.
 
-## The problem
-
-The DSH Web UI has three columns: navigation on the left, the conversation in the middle, and a docked file / terminal panel on the right. In portrait orientation (window narrower than tall — a rotated monitor, a narrow window) opening the right panel squeezes the conversation into a very narrow strip.
-
-On "desktop + portrait" (whether the right panel is open or closed) it rearranges the three columns as follows — when the panel is closed the docked track height is 0:
-
-- **left column**: navigation, full column height;
-- **top right**: the file / terminal panel (initially ~40% of the window height, configurable and draggable);
-- **bottom right**: the conversation, spanning the full width outside the navigation column;
-- between them runs a divider matching DSH's native column border, with a drag handle on it; the open / collapse button icon rotates 90° to say the panel is on top;
-- **phones and tablets are completely unaffected**: touch devices get no injected styles and keep the native portrait layout.
-
-## Behaviour
+## Layout behaviour
 
 | Environment | Result |
 | --- | --- |
 | Desktop · landscape | nothing changes (native three columns) |
-| Desktop · portrait · right panel closed | three columns are still rearranged for portrait, but the docked track height is 0 (only the open-button icon rotates) |
+| Desktop · portrait · right panel closed | three columns are still rearranged for portrait, but the docked track height is 0 (only the open-button icon rotates, indicating the panel is on top) |
 | Desktop · portrait · right panel open | navigation fills the left column; file / terminal top-right, conversation bottom-right, with a draggable divider between them |
 
 ## Install
@@ -51,15 +39,11 @@ The initial height comes from `topRatio`; it can then be dragged within the sess
 
 ## Known limitations
 
-- With a very narrow window (roughly < 700px, depending on sidebar state) DSH's own layout logic decides there is no room and the right panel cannot be opened — that comes from the framework's column solver and this plugin does not interfere.
+- With a very narrow window (roughly < 700px, depending on sidebar state), the right panel cannot be opened.
 - When the right panel is fullscreen the plugin stays out of the way; the panel covers the window as usual.
 - In portrait the right-column width handle is hidden (the width comes from "fill the top-right area"), and it returns in landscape; dragging the left navigation proportionally narrows the docked area.
 - The docked height only lasts for the session; after a refresh it returns to `topRatio`.
 - Phones / tablets skip this plugin entirely; use another solution for mobile portrait (e.g. dsh-web-mobile).
-
-## Version compatibility
-
-This plugin declares no `@deepseek-ai/dsh-*` peerDependencies (it only relies on stable DOM data attributes and design-token CSS variables), so the DSH version gate does not constrain it; after upgrading DSH, glance at the UI once to confirm.
 
 ## License
 

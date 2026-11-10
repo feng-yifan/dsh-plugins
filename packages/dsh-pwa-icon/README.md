@@ -53,7 +53,3 @@ dsh plugin --profile web add dsh-pwa-icon
 - **图标路由是公开的** → 浏览器取图标不带凭据（与 favicon 同性质），配了 `icon` 就意味着这张图对能访问该端口的网络可见。
 - **iOS** → 主屏标签取 manifest 的 `short_name`；图标优先用 `apple-touch-icon`（包内已提供 180×180 PNG、实底）；iOS 26 实测也会读 manifest 里的 WebP。
 - **包内那组图标来自本仓库维护者**，随 npm 公开分发；要用自己的图请配 `icon`。
-
-## 版本适配
-
-本包不声明任何 `@deepseek-ai/dsh-*` peerDependencies，因此不受 DSH 版本门禁约束。

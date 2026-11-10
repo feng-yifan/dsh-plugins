@@ -64,11 +64,9 @@ DSH 只在直连官方 DeepSeek API 时发送 `x-deepseek-harness-session-id`；
 - 保存后下一次模型请求即生效，不需要重启 DSH。
 - 上游若已存在同名头，插件的注入不会覆盖它。
 
-> 实现说明：注入点在第三方 adapter 的 `streamWithSnapshot` 原型方法上（DSH 在该方法内重建 pi-ai 的 options，`llm/stream` 层改不动请求头）。因此本功能依赖宿主内部结构，宿主版本结构变化时会自动旁路并记录原因，不会阻断请求。
+### 面板状态提示
 
-### 为什么显示「尚未挂载」
-
-`dsh-base` 以**休眠态**挂载 `llm-pi-ai`：没有配置任何 provider 路由时它不会注册 adapter（`routes.length === 0` 直接返回），此时插件无处注入。这是正常状态，不是故障。设置页按原因区分：
+设置页会显示当前的挂载状态：
 
 | 提示 | 含义 | 处理 |
 | --- | --- | --- |

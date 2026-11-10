@@ -53,7 +53,3 @@ dsh plugin --profile web add dsh-pwa-icon
 - **The icon routes are public** → browsers fetch icons without credentials (same nature as the favicon), so configuring `icon` exposes that image to anything that can reach the port.
 - **iOS** → the home-screen label comes from the manifest `short_name`; the icon prefers `apple-touch-icon` (the package ships a 180×180 opaque PNG); iOS 26 was also observed reading the WebP icon from the manifest.
 - **The bundled icons come from this repository's maintainer** and are distributed publicly on npm; configure `icon` if you want your own.
-
-## Version compatibility
-
-This package declares no `@deepseek-ai/dsh-*` peerDependencies, so the DSH version gate does not constrain it.

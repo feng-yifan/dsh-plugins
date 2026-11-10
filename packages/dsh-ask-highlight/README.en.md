@@ -33,20 +33,12 @@ $DSH_HOME/profiles/<profile>/fengyifan-dsh-ask-highlight/state.json
 
 The settings card shows the actual path. Each profile keeps its own copy.
 
-The same two fields may appear in `cordis.patch.yml`, but that file only **seeds the initial state.json**: once the settings page has written a value, state.json wins and the profile file no longer overrides it.
+The same two fields may appear in `cordis.patch.yml`, but that file only seeds the initial state.json: once the settings page has written a value, state.json wins and the profile file no longer overrides it.
 
-### Why a separate state file
+## Known limitations
 
-`cordis.patch.yml` is a composition-layer declaration; a plugin editing it at runtime triggers a Loader reload of the whole plugin chain. These two switches only change *what gets injected*, so keeping them in the plugin's own state file — read fresh on every `webserver/index-inject` — is far cheaper. This mirrors how `dsh-enhancement` stores its config.
-
-## Known trade-offs
-
-- Cancelled ask blocks (also in the finished state, labelled "cancelled") are highlighted as well; telling them apart would require reading the text, which this plugin does not do.
-- Colors come from the DSH theme token `--dsw-alias-state-business-primary`, so light and dark themes adapt automatically.
-- The expanded card uses one 8px padding on all four sides: the content card's own `margin: 4px 0 4px 4px` is neutralized and the normally hidden "inspect" button becomes an absolutely positioned overlay, so it no longer pads the card's bottom with a blank strip.
-- "Expand by default" relies on DSH's `data-*` contract (`data-tool`, `data-disclosure-row`, `data-disclosure-header`, `data-open`, `aria-expanded`, `data-chat-call-id`). If DSH renames those, expansion fails silently; the highlight style is unaffected.
-- A collapsed ask block keeps its details out of the DOM entirely, so expanding reuses DSH's own disclosure action (the script clicks the row once) instead of forcing it with CSS. Bookkeeping is per **DOM node** (a `WeakSet` held in page memory only — nothing is persisted, and a refresh clears it), so: a block expands when it appears; **a block you collapse by hand stays collapsed** (otherwise streaming output and scrolling, which mutate the DOM, would keep re-opening it); and **a page refresh or a session switch expands it again** — switching sessions unmounts and rebuilds the subtree, so those are new nodes and therefore new blocks.
-
-## Version compatibility
-
-This plugin declares no `@deepseek-ai/dsh-*` peerDependencies, so the DSH version gate does not constrain it.
+- Cancelled ask blocks (also in the finished state, labelled "cancelled") are highlighted as well.
+- Colors adapt automatically to the light / dark DSH theme.
+- In the expanded state, padding is a uniform 8px on all four sides.
+- "Expand by default" relies on DSH's DOM conventions; if DSH changes them, expansion fails silently, but the highlight style is unaffected.
+- With expand-by-default on: a block expands when it appears; a block you collapse by hand stays collapsed; and a page refresh or a session switch expands it again.

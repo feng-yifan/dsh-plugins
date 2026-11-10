@@ -63,11 +63,9 @@ DSH only sends `x-deepseek-harness-session-id` when talking to the official Deep
 - Takes effect on the next model request after saving — no restart needed.
 - An existing header of the same name set upstream is never overwritten.
 
-> Implementation note: injection happens on the third-party adapter's `streamWithSnapshot` prototype method, because DSH rebuilds the pi-ai options inside it — the `llm/stream` layer cannot change request headers. The feature therefore depends on host internals; if the host shape changes, it bypasses itself and records the reason instead of blocking requests.
+### Panel status
 
-### Why it says "not mounted yet"
-
-`dsh-base` mounts `llm-pi-ai` in a **dormant** state: with no provider routes configured it never registers an adapter (`routes.length === 0` returns early), so there is nothing to inject into. That is a normal state, not a failure. The settings page distinguishes the causes:
+The settings page shows the current mount status:
 
 | Message | Meaning | What to do |
 | --- | --- | --- |

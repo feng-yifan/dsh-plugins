@@ -6,7 +6,7 @@
 
 An enhancement for DSH external `@` file references: the `@` completion in the Web GUI input can **browse and reference any absolute-path file / directory outside the workspace, level by level**. Selecting a candidate inserts its absolute path (quoted as `@"..."` when it contains spaces), and the model then reads it with the `read` tool by absolute path.
 
-DSH's built-in `@` completion only lists files inside the current session workspace (cwd) and returns nothing for absolute-path queries. This plugin does not touch DSH's own provider; it wraps `fileReferences.list` on the host side: ordinary queries pass through unchanged, while external absolute-path queries get candidates enumerated level by level.
+DSH's built-in `@` completion only lists files inside the current session workspace and returns nothing for absolute-path queries; with this plugin enabled you can browse absolute paths outside the workspace level by level.
 
 ## Install
 
@@ -22,9 +22,9 @@ Replace `<name>` with your profile (commonly `web`). Refresh the browser after i
 2. Type `/` or `~/` to start browsing outside the workspace:
    - `@/` → start from the filesystem root;
    - `@~/` → start from your home directory;
-   - `@/home/viktor/Documents/` → keep drilling down.
+   - `@/home/user/Documents/` → keep drilling down.
 3. Keep typing a directory / file name to filter (case-insensitive substring match).
-4. Selecting a candidate inserts its **absolute path**, e.g. `@/home/viktor/Documents/a.md`; paths with spaces become `@"..."`.
+4. Selecting a candidate inserts its **absolute path**, e.g. `@/home/user/Documents/a.md`; paths with spaces become `@"..."`.
 5. The model reads it with the `read` tool by absolute path (reads are not sandbox-restricted).
 
 ## Config
@@ -54,7 +54,3 @@ The settings card shows the actual path. Each profile keeps its own copy.
 - If the host `fileReferences` service is missing or shaped differently, the plugin bypasses automatically (provider shows missing) and native completion is unaffected.
 - At most 20 candidates are returned per query.
 - Symbolic-link directories are shown as directories but are **not** expanded recursively.
-
-## Version compatibility
-
-This plugin declares no `@deepseek-ai/dsh-*` peerDependencies and no `engines.dsh`, so the DSH version gate does not constrain it.
