@@ -82,8 +82,12 @@ async function createCa(): Promise<{ certPem: string; keyPem: string }> {
   return { certPem: forge.pki.certificateToPem(cert), keyPem: forge.pki.privateKeyToPem(keys.privateKey) }
 }
 
-async function createLeaf(caCertPem: string, caKeyPem: string, hosts: string[]): Promise<{ certPem: string; keyPem: string }> {
-  const caCert = forge.pki.certificateFromPem(caCertPem)
+/**
+ * 用「签名 CA 证书」签发 leaf。签名 CA 必须是证书包中与 CA 私钥匹配的那一张，
+ * 而不是包里第一张；否则 issuer 字段会指向错误的 CA，客户端无法补全信任链。
+ */
+async function createLeaf(signerCertPem: string, caKeyPem: string, hosts: string[]): Promise<{ certPem: string; keyPem: string }> {
+  const signerCert = forge.pki.certificateFromPem(signerCertPem)
   const caKey = forge.pki.privateKeyFromPem(caKeyPem)
   const keys = await generateKeyPair()
   const cert = forge.pki.createCertificate()
@@ -93,7 +97,7 @@ async function createLeaf(caCertPem: string, caKeyPem: string, hosts: string[]):
   cert.validity.notAfter = new Date(Date.now() + 825 * 24 * 60 * 60 * 1000)
   const primary = hosts[0] ?? 'dsh-enhancement'
   cert.setSubject([{ name: 'commonName', value: primary }])
-  cert.setIssuer(caCert.subject.attributes)
+  cert.setIssuer(signerCert.subject.attributes)
   cert.setExtensions([
     { name: 'basicConstraints', cA: false },
     { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
@@ -190,13 +194,79 @@ function validateCertKey(certPem: string, keyPem: string, hosts: string[]): stri
   return assertCovered(cert, hosts)
 }
 
-function validateCa(caCertPem: string, caKeyPem: string): X509Certificate {
-  const ca = new X509Certificate(caCertPem)
-  if (!ca.ca) throw new Error('上传的证书不是 CA（basicConstraints CA=false）')
-  const key = createPrivateKey(caKeyPem)
-  if (!ca.checkPrivateKey(key)) throw new Error('CA 证书与 CA 私钥不匹配')
-  if (ca.validToDate.getTime() <= Date.now()) throw new Error(`CA 证书已过期（${ca.validTo}）`)
-  return ca
+/** 从一段 PEM 里按顺序拆出所有 CERTIFICATE 块。node-forge / X509Certificate 只解析第一张，必须自己拆。 */
+function splitPemCertificates(pem: string): string[] {
+  const matches = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g)
+  return matches ? matches.map((item) => item.trim()) : []
+}
+
+interface SignerSelection {
+  signerPem: string
+  signer: X509Certificate
+}
+
+/**
+ * 在 CA 证书包里找出与给定私钥匹配的那张证书（真正的签名者）。
+ * 包内通常是「签名者 + 一个或多个上级中间 CA + 可选自签根」，顺序不固定。
+ */
+function selectSignerFromBundle(bundlePem: string, keyPem: string): SignerSelection {
+  const pems = splitPemCertificates(bundlePem)
+  if (pems.length === 0) throw new Error('CA 证书无效（未找到 PEM 证书）')
+  const key = createPrivateKey(keyPem)
+  let signerPem: string | null = null
+  let signer: X509Certificate | null = null
+  for (const pem of pems) {
+    const cert = new X509Certificate(pem)
+    if (cert.checkPrivateKey(key)) {
+      signerPem = pem
+      signer = cert
+      break
+    }
+  }
+  if (!signerPem || !signer) throw new Error('CA 证书与 CA 私钥不匹配')
+  if (!signer.ca) throw new Error('签名证书不是 CA（basicConstraints CA=false）')
+  if (signer.validToDate.getTime() <= Date.now()) throw new Error(`CA 证书已过期（${signer.validTo}）`)
+  return { signerPem, signer }
+}
+
+/**
+ * 从签名 CA 向上按 issuer→subject 拼出「需要随 TLS 下发的中间 CA 链」。
+ * - 签名者是自签根（subject === issuer）：返回空——根由客户端信任库提供，不随服务器下发。
+ * - 签名者是中间 CA：返回 [签名者, 其上级中间 CA, ...]，到自签根为止但不含根。
+ * 只有把中间 CA 一起下发，客户端才能把 leaf 接到受信任的根，形成完整信任链。
+ */
+function buildServedChain(signerPem: string, signer: X509Certificate, bundlePem: string): string[] {
+  const bySubject = new Map<string, { pem: string; cert: X509Certificate }>()
+  for (const pem of splitPemCertificates(bundlePem)) {
+    const cert = new X509Certificate(pem)
+    bySubject.set(cert.subject, { pem, cert })
+  }
+  const out: string[] = []
+  let current = signer
+  let currentPem = signerPem
+  const seen = new Set<string>()
+  while (current.subject !== current.issuer) {
+    if (seen.has(current.subject)) break
+    seen.add(current.subject)
+    out.push(currentPem)
+    const parent = bySubject.get(current.issuer)
+    if (!parent) break
+    current = parent.cert
+    currentPem = parent.pem
+  }
+  return out
+}
+
+/**
+ * 用一段 CA 证书包 + 私钥签发 leaf，并返回「leaf + 中间 CA」拼接后的完整证书链。
+ * 这样交给 TLS 服务器的 cert 就带有完整链，浏览器可补全到受信任的根。
+ */
+async function issueLeafFromBundle(bundlePem: string, caKeyPem: string, hosts: string[]): Promise<{ certPem: string; keyPem: string }> {
+  const { signerPem, signer } = selectSignerFromBundle(bundlePem, caKeyPem)
+  const leaf = await createLeaf(signerPem, caKeyPem, hosts)
+  const chain = buildServedChain(signerPem, signer, bundlePem)
+  const certPem = [leaf.certPem.trim(), ...chain].join('\n') + '\n'
+  return { certPem, keyPem: leaf.keyPem }
 }
 
 export interface PreparedTls {
@@ -228,7 +298,8 @@ export async function prepareTls(config: GatewayConfig, webHost: string): Promis
     let caKeyPem = readIf(TLS_FILES.caKey)
     if (config.httpsMode === 'ca') {
       if (!caCertPem || !caKeyPem) throw new Error('尚未上传 CA 证书/CA 私钥')
-      validateCa(caCertPem, caKeyPem)
+      // 上传的可能是「签名者 + 上级中间 CA」的完整链；先校验签名者是否与私钥匹配。
+      selectSignerFromBundle(caCertPem, caKeyPem)
       // 兼容旧版本：旧版只把上传 CA 放在 ca.crt/key；第一次启动时复制为可复用副本。
       if (!existsSync(TLS_FILES.uploadedCaCert) || !existsSync(TLS_FILES.uploadedCaKey)) {
         atomicWrite(TLS_FILES.uploadedCaCert, caCertPem, 0o600)
@@ -241,10 +312,10 @@ export async function prepareTls(config: GatewayConfig, webHost: string): Promis
       atomicWrite(TLS_FILES.caCert, caCertPem, 0o600)
       atomicWrite(TLS_FILES.caKey, caKeyPem, 0o600)
     }
-    const leaf = await createLeaf(caCertPem, caKeyPem, hosts)
-    atomicWrite(TLS_FILES.cert, leaf.certPem, 0o600)
-    atomicWrite(TLS_FILES.key, leaf.keyPem, 0o600)
-    return { material: { cert: leaf.certPem, key: leaf.keyPem, caCert: caCertPem }, warnings, caCertPem }
+    const issued = await issueLeafFromBundle(caCertPem, caKeyPem, hosts)
+    atomicWrite(TLS_FILES.cert, issued.certPem, 0o600)
+    atomicWrite(TLS_FILES.key, issued.keyPem, 0o600)
+    return { material: { cert: issued.certPem, key: issued.keyPem, caCert: caCertPem }, warnings, caCertPem }
   }
 
   throw new Error(`未知 HTTPS 模式：${String(config.httpsMode)}`)
@@ -259,15 +330,14 @@ export async function installUploadedCertificate(certPem: string, keyPem: string
 }
 
 export async function installUploadedCa(caCertPem: string, caKeyPem: string, config: GatewayConfig, webHost: string): Promise<string[]> {
-  validateCa(caCertPem, caKeyPem)
+  const hosts = hostsFor(config, webHost)
+  const issued = await issueLeafFromBundle(caCertPem, caKeyPem, hosts)
   atomicWrite(TLS_FILES.uploadedCaCert, caCertPem, 0o600)
   atomicWrite(TLS_FILES.uploadedCaKey, caKeyPem, 0o600)
   atomicWrite(TLS_FILES.caCert, caCertPem, 0o600)
   atomicWrite(TLS_FILES.caKey, caKeyPem, 0o600)
-  const hosts = hostsFor(config, webHost)
-  const leaf = await createLeaf(caCertPem, caKeyPem, hosts)
-  atomicWrite(TLS_FILES.cert, leaf.certPem, 0o600)
-  atomicWrite(TLS_FILES.key, leaf.keyPem, 0o600)
+  atomicWrite(TLS_FILES.cert, issued.certPem, 0o600)
+  atomicWrite(TLS_FILES.key, issued.keyPem, 0o600)
   return []
 }
 
@@ -275,13 +345,12 @@ export async function useStoredUploadedCa(config: GatewayConfig, webHost: string
   const caCertPem = readIf(TLS_FILES.uploadedCaCert)
   const caKeyPem = readIf(TLS_FILES.uploadedCaKey)
   if (!caCertPem || !caKeyPem) throw new Error('尚未保存过上传的 CA 证书/私钥')
-  validateCa(caCertPem, caKeyPem)
   const hosts = hostsFor(config, webHost)
-  const leaf = await createLeaf(caCertPem, caKeyPem, hosts)
+  const issued = await issueLeafFromBundle(caCertPem, caKeyPem, hosts)
   atomicWrite(TLS_FILES.caCert, caCertPem, 0o600)
   atomicWrite(TLS_FILES.caKey, caKeyPem, 0o600)
-  atomicWrite(TLS_FILES.cert, leaf.certPem, 0o600)
-  atomicWrite(TLS_FILES.key, leaf.keyPem, 0o600)
+  atomicWrite(TLS_FILES.cert, issued.certPem, 0o600)
+  atomicWrite(TLS_FILES.key, issued.keyPem, 0o600)
 }
 
 export async function generateSelfSigned(config: GatewayConfig, webHost: string): Promise<void> {
@@ -289,9 +358,9 @@ export async function generateSelfSigned(config: GatewayConfig, webHost: string)
   const ca = await createCa()
   atomicWrite(TLS_FILES.caCert, ca.certPem, 0o600)
   atomicWrite(TLS_FILES.caKey, ca.keyPem, 0o600)
-  const leaf = await createLeaf(ca.certPem, ca.keyPem, hosts)
-  atomicWrite(TLS_FILES.cert, leaf.certPem, 0o600)
-  atomicWrite(TLS_FILES.key, leaf.keyPem, 0o600)
+  const issued = await issueLeafFromBundle(ca.certPem, ca.keyPem, hosts)
+  atomicWrite(TLS_FILES.cert, issued.certPem, 0o600)
+  atomicWrite(TLS_FILES.key, issued.keyPem, 0o600)
 }
 
 export function caCertificatePem(): string | null {
