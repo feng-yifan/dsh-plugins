@@ -61,6 +61,8 @@ git push origin dsh-vertical-layout@x.y.z           #    推送即触发发布
 
 工作流会构建并以 `--provenance --access public` 发布该包；也可在 Actions 页用 `workflow_dispatch` 手动补发。`dsh-font-settings` 已废弃，不在发布列表里。
 
+新包首次 CI 发布前，须先在 npmjs 为包配置 Trusted Publisher（仓库 `feng-yifan/dsh-plugins`、工作流 `npm-publish.yml`）；该配置创建后 48 小时内须完成首次发布，否则会过期、需要重建。
+
 ## DSH 版本兼容
 
 DSH 在组合 profile 前做兼容性预检，规则有三条，**优先级不能搞反**：

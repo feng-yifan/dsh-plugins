@@ -66,6 +66,8 @@ git push origin dsh-vertical-layout@x.y.z           #    pushing the tag trigger
 
 The workflow builds and publishes that package with `--provenance --access public`; `workflow_dispatch` in the Actions tab can re-publish manually. `dsh-font-settings` is deprecated and not in the publish list.
 
+Before a new package's first CI release, configure its Trusted Publisher on npmjs (repo `feng-yifan/dsh-plugins`, workflow `npm-publish.yml`); the configuration must produce a first successful publish within 48 hours or it expires and must be recreated.
+
 ## DSH version compatibility
 
 Before composing a profile, DSH runs a compatibility preflight with three rules — **get the precedence right**:

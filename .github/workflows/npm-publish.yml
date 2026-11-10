@@ -10,7 +10,7 @@
 #
 # `dsh-font-settings` 已废弃（见 packages/dsh-font-settings/DEPRECATED.md）：不再接受其 tag 发布，
 # 也不再出现在手动发布的包列表里。npmjs 上为 dsh-vertical-layout、dsh-ask-highlight、dsh-pwa-icon、dsh-enhancement、
-# dsh-enter-plan-mode、dsh-alertmanager 配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
+# dsh-enter-plan-mode、dsh-alertmanager、dsh-at-enhancement 配置过 Trusted Publisher，GitHub 仓库选 feng-yifan/dsh-plugins，
 # 见 https://docs.npmjs.com/trusted-publishers
 #
 # npm 现行政策（2026-10 观测）：新包的 Trusted Publisher 配置属「未验证」，创建后 48 小时内
@@ -28,6 +28,7 @@ on:
       - 'dsh-enhancement@*'
       - 'dsh-enter-plan-mode@*'
       - 'dsh-alertmanager@*'
+      - 'dsh-at-enhancement@*'
   workflow_dispatch:
     inputs:
       package:
@@ -41,6 +42,7 @@ on:
           - dsh-enhancement
           - dsh-enter-plan-mode
           - dsh-alertmanager
+          - dsh-at-enhancement
 
 permissions:
   contents: read

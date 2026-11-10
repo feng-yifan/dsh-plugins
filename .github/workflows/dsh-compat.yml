@@ -156,6 +156,7 @@ jobs:
           node scripts/smoke-plugin.mjs --package dsh-ask-highlight --expect-html dsh-ask-highlight
           node scripts/smoke-plugin.mjs --package dsh-vertical-layout --expect-html data-dsh-vertical-layout
           node scripts/smoke-plugin.mjs --package dsh-pwa-icon --expect-html apple-touch-icon
+          node scripts/smoke-plugin.mjs --package dsh-at-enhancement --expect-html dsh-at-enhancement
           # dsh-enter-plan-mode 是纯宿主插件（注册 dsh_enter_plan_mode 工具），
           # 没有可断言的 index.html 标记；它只要能在目标版本上被接受并干净启动即可。
           node scripts/smoke-plugin.mjs --package dsh-enter-plan-mode
