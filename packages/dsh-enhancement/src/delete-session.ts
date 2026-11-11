@@ -6,7 +6,7 @@
  *  - sessionId 必须匹配白名单字符集，杜绝路径穿越；
  *  - 真正要删的目录必须恰好是 `<sessionsRoot>/<projectDir>/<sessionDir>`，
  *    且目录内确实存在 `session.v*.jsonl*` 日志文件，避免误删别的东西；
- *  - 运行中 / 已打开的会话一律拒绝。
+ *  - 运行中的会话会先自动停止（停止超时则报错，不再直接拒绝）。
  * 注册表（workspaceRegistry）只是尽力清理，失败不影响主删除结果。
  */
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -19,16 +19,26 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 /** 会话日志文件名：`session.v*.jsonl*`（例如 session.v4.jsonl.zstd）。 */
 const SESSION_LOG_PATTERN = /^session\.v.*\.jsonl/
 
-export type DeleteErrorCode = 'request.invalid' | 'session.active' | 'delete.unsafe-path'
+/** 等待运行中会话停下来的默认超时（毫秒）。 */
+const DEFAULT_STOP_TIMEOUT_MS = 10_000
+
+export type DeleteErrorCode = 'request.invalid' | 'session.stop-timeout' | 'delete.unsafe-path'
 
 export interface SessionDeleteContextLike {
   get(name: string): unknown
+  parallel?(event: string, data: unknown): Promise<unknown> | unknown
 }
 
 export interface DeleteSessionResult {
   deleted: boolean
   reason?: string
+  stopped?: boolean
   warnings?: string[]
+}
+
+export interface DeleteSessionOptions {
+  /** 等待运行中会话停止的超时，默认 10000ms；主要供测试注入更短的值。 */
+  stopTimeoutMs?: number
 }
 
 function codedError(code: DeleteErrorCode, message: string): Error {
@@ -115,25 +125,57 @@ async function cleanupRegistry(
   }
 }
 
+/** 等待运行中的 agent 进入 idle；超时返回 false。 */
+async function waitForAgentIdle(agent: { whenIdle?(): Promise<void> }, timeoutMs: number): Promise<boolean> {
+  const whenIdle = agent.whenIdle
+  if (typeof whenIdle !== 'function') return true
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      Promise.resolve(whenIdle.call(agent)).then(() => true),
+      new Promise<boolean>((resolveTimeout) => {
+        timer = setTimeout(() => resolveTimeout(false), timeoutMs)
+        timer.unref?.()
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
 /**
  * 物理删除一个会话的持久化目录，并尽力清理注册表。
  *
+ * 运行中的会话会先通过 `workspace/session-stop` 停止；若在超时内仍在运行，
+ * 抛 `session.stop-timeout`。不再因为“会话已打开”而直接拒绝。
+ *
  * @throws `code: 'request.invalid'` sessionId 非法
- * @throws `code: 'session.active'` 会话运行中或已打开
+ * @throws `code: 'session.stop-timeout'` 会话在超时内没有停下来
  * @throws `code: 'delete.unsafe-path'` 解析出的目录不安全
  */
 export async function deleteSessionStorage(
   ctx: SessionDeleteContextLike,
   sessionId: unknown,
+  options: DeleteSessionOptions = {},
 ): Promise<DeleteSessionResult> {
   if (!isSafeSessionId(sessionId)) {
     throw codedError('request.invalid', '会话 ID 不合法')
   }
 
-  const agents = ctx.get('agents') as { get?(id: string): unknown } | undefined
-  const sessions = ctx.get('sessions') as { get?(id: string): unknown } | undefined
-  if (agents?.get?.(sessionId) || sessions?.get?.(sessionId)) {
-    throw codedError('session.active', '会话正在运行或已打开，无法删除')
+  const agents = ctx.get('agents') as
+    | { get?(id: string): { status?: string; whenIdle?(): Promise<void> } | undefined }
+    | undefined
+  const agent = agents?.get?.(sessionId)
+  // 在停止前记录：返回体的 stopped 表示删除前它是否在运行。
+  const stopped = agent?.status === 'running'
+
+  // 无论有没有 agent 都走一遍停止链路，取消回合/子代理/jobs/计划。
+  await ctx.parallel?.('workspace/session-stop', { sessionId })
+
+  if (stopped) {
+    const stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS
+    const ok = await waitForAgentIdle(agent as { whenIdle?(): Promise<void> }, stopTimeoutMs)
+    if (!ok) throw codedError('session.stop-timeout', '会话仍在停止中，请稍后重试')
   }
 
   const warnings: string[] = []
@@ -150,7 +192,7 @@ export async function deleteSessionStorage(
   rmSync(dir, { recursive: true, force: true })
   await cleanupRegistry(ctx, sessionId, warnings)
 
-  const result: DeleteSessionResult = { deleted: true }
+  const result: DeleteSessionResult = { deleted: true, stopped }
   if (warnings.length > 0) result.warnings = warnings
   return result
 }

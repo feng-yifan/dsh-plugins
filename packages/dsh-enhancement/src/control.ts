@@ -429,7 +429,7 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     } catch (error) {
       const err = error as { code?: unknown; message?: unknown }
       const code = typeof err?.code === 'string' ? err.code : undefined
-      const statusCode = code === 'session.active' ? 409 : code === 'delete.unsafe-path' ? 409 : code === 'request.invalid' ? 400 : 500
+      const statusCode = code === 'session.stop-timeout' ? 409 : code === 'delete.unsafe-path' ? 409 : code === 'request.invalid' ? 400 : 500
       const message = typeof err?.message === 'string' ? err.message : String(error)
       json(res, statusCode, { error: message, code })
     }

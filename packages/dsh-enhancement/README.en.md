@@ -18,7 +18,7 @@ Set a password, open the gateway URL, and log in to DSH without carrying around 
 | Desktop notifications | System notifications for task completion, questions, approvals, and background jobs |
 | Mobile push | PWA Web Push notifications on your phone; tap to return to the matching session |
 | Session header | Send a DSH session-id request header on third-party API routes too, so a gateway can correlate requests by session |
-| Delete session | Delete a session straight from its menu (physical delete, confirmation by default, running sessions refused) |
+| Delete session | Delete a session straight from its menu (physical delete, confirmation by default, running sessions stopped automatically) |
 
 ## Password gateway
 
@@ -79,9 +79,10 @@ The settings page shows the current mount status:
 
 Delete a session directly from its sidebar session menu (the entry sits above “Archive session”). Deleting physically removes the session's persisted files and **cannot be undone**.
 
-- Running or currently open sessions are refused.
+- Any session can be deleted; a running session is stopped automatically before deletion.
 - A second confirmation is required by default: the first click turns the item into “确认删除” (Confirm delete), a second click performs the deletion. This can be turned off in settings.
 - Only `<sessions root>/<project>/<session id>` is removed, and the directory must actually contain a session log file (`session.v*.jsonl*`), so other files cannot be deleted by mistake.
+- The “automatic purge on uninstall” behavior has been removed: upgrading (uninstall then install) no longer loses plugin configuration.
 
 | Setting | Default | Notes |
 | --- | --- | --- |

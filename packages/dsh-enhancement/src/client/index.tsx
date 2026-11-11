@@ -1283,6 +1283,7 @@ interface SessionMenuProps {
 const deleteMenuItemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
+  gap: 8,
   width: '100%',
   padding: '8px 12px',
   border: 0,
@@ -1292,6 +1293,49 @@ const deleteMenuItemStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontSize: 13,
   color: 'var(--dsw-alias-state-error-primary, #d92d20)',
+}
+
+/** 内联垃圾桶图标（16px 描边，复制自 Fluent 轮廓风格，避免依赖内部 primitives）。 */
+function TrashIcon(): React.ReactElement {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 4.5h11" />
+      <path d="M5.5 4.5V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5" />
+      <path d="M3.5 4.5l.6 8.1a1 1 0 0 0 1 .9h5.8a1 1 0 0 0 1-.9l.6-8.1" />
+      <path d="M6.5 7v4M9.5 7v4" />
+    </svg>
+  )
+}
+
+/** 内联警告三角图标（16px 描边，用于二次确认态）。 */
+function WarningIcon(): React.ReactElement {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 2.5 14 13H2L8 2.5Z" />
+      <path d="M8 6.5v3" />
+      <path d="M8 11.5h.01" />
+    </svg>
+  )
 }
 
 /**
@@ -1347,7 +1391,19 @@ function DeleteSessionMenu(props: SessionMenuProps): React.ReactElement {
   return (
     <>
       <button type="button" role="menuitem" style={deleteMenuItemStyle} disabled={busy} onClick={onClick}>
-        {busy ? '删除中…' : confirming ? '确认删除' : '删除会话'}
+        {busy ? (
+          <span>删除中…</span>
+        ) : confirming ? (
+          <>
+            <WarningIcon />
+            <span>确认删除</span>
+          </>
+        ) : (
+          <>
+            <TrashIcon />
+            <span>删除会话</span>
+          </>
+        )}
       </button>
       {error ? <div style={{ ...styles.error, padding: '0 12px 6px' }}>{error}</div> : null}
     </>
