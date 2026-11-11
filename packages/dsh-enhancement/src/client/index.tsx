@@ -95,6 +95,7 @@ interface Status {
   notify: NotifyStatus
   push: PushStatus
   sessionHeader: SessionHeaderStatus
+  sessionDeleteConfirm: boolean
 }
 
 interface ClientContext {
@@ -391,6 +392,7 @@ function Card(): React.ReactElement {
   const [customIcons, setCustomIcons] = useState<string[]>([])
   const [sessionHeaderEnabled, setSessionHeaderEnabled] = useState(false)
   const [sessionHeaderName, setSessionHeaderName] = useState('x-deepseek-harness-session-id')
+  const [sessionDeleteConfirm, setSessionDeleteConfirm] = useState(true)
 
   const applyStatus = useCallback((next: Status) => {
     setStatus(next)
@@ -423,6 +425,7 @@ function Card(): React.ReactElement {
     setCustomIcons(next.pwa?.customIcons ?? [])
     setSessionHeaderEnabled(next.sessionHeader?.enabled ?? false)
     setSessionHeaderName(next.sessionHeader?.headerName ?? 'x-deepseek-harness-session-id')
+    setSessionDeleteConfirm(next.sessionDeleteConfirm !== false)
     setHttpsChoice(next.https?.mode === 'uploaded' ? 'uploaded' : next.https?.mode === 'off' ? 'off' : 'selfsigned')
     setCaSource(next.https?.mode === 'ca' ? 'uploaded' : 'generated')
   }, [])
@@ -502,6 +505,8 @@ function Card(): React.ReactElement {
     })
     applyStatus(next)
   }, '会话请求头配置已保存，下一次模型请求即生效。')
+
+  const saveDeleteConfirm = () => saveFields('sessionDelete', { sessionDeleteConfirm }, '会话删除设置已保存')
 
   const saveGateway = () => runBlock('gateway', async () => {
     let next = await api<Status>('/config', {
@@ -774,6 +779,7 @@ function Card(): React.ReactElement {
   const sessionHeaderDirty =
     sessionHeaderEnabled !== status.sessionHeader.enabled ||
     sessionHeaderName !== status.sessionHeader.headerName
+  const sessionDeleteDirty = sessionDeleteConfirm !== status.sessionDeleteConfirm
   const accessDirty = newPassword.length > 0 || confirmPassword.length > 0
 
   const iconUrl = (kind: string): string => `/pwa/enhancement/${kind}?v=${iconVersion}`
@@ -1166,6 +1172,27 @@ function Card(): React.ReactElement {
         )}
       </Block>
 
+      <Block
+        order={6}
+        title="会话删除"
+        hint="在侧边栏会话菜单里直接删除会话：物理删除持久化文件，不可恢复；运行中/已打开的会话会被拒绝。"
+        dirty={sessionDeleteDirty}
+        busy={busy}
+        saveLabel="保存会话删除设置"
+        onSave={saveDeleteConfirm}
+        status={blockStatus.sessionDelete}
+      >
+        <Row label="删除前二次确认">
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={sessionDeleteConfirm} onChange={(event) => setSessionDeleteConfirm(event.target.checked)} />
+            <span>{sessionDeleteConfirm ? '开启' : '关闭'}</span>
+          </label>
+        </Row>
+        <div style={styles.muted}>
+          开启后，在会话菜单里删除会话需要点两次（第一次变成「确认删除」）；关闭后单击即删除。删除是物理操作，无法恢复。
+        </div>
+      </Block>
+
     </div>
   )
 }
@@ -1247,6 +1274,86 @@ function openSessionFromQuery(ctx: ClientContext): () => void {
   }
 }
 
+interface SessionMenuProps {
+  sessionId: string
+  displayTitle: string
+  useMenuOpenState: () => [boolean, (open: boolean) => void]
+}
+
+const deleteMenuItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  padding: '8px 12px',
+  border: 0,
+  borderRadius: 8,
+  background: 'transparent',
+  textAlign: 'left',
+  cursor: 'pointer',
+  fontSize: 13,
+  color: 'var(--dsw-alias-state-error-primary, #d92d20)',
+}
+
+/**
+ * 会话菜单里的「删除会话」项。
+ * 需要确认时，第一次点击原地把文字改成「确认删除」，不关闭菜单；再次点击才真正删除。
+ * 菜单关闭后组件卸载，confirming 自动复位。
+ */
+function DeleteSessionMenu(props: SessionMenuProps): React.ReactElement {
+  const [, setMenuOpen] = props.useMenuOpenState()
+  const [confirming, setConfirming] = useState(false)
+  const [confirmRequired, setConfirmRequired] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    api<{ confirmDelete: boolean }>('/delete-session')
+      .then((value) => {
+        if (alive) setConfirmRequired(value.confirmDelete !== false)
+      })
+      .catch(() => {
+        /* 读取设置失败时保留默认「需要确认」，更安全 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const onClick = (): void => {
+    if (busy) return
+    if (confirmRequired && !confirming) {
+      setConfirming(true)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    // 请求成功后才关闭菜单；失败时保持菜单打开并原地显示错误（例如会话运行中会被 409 拒绝）。
+    void (async () => {
+      try {
+        await api('/delete-session', {
+          method: 'POST',
+          body: JSON.stringify({ sessionId: props.sessionId }),
+        })
+        setMenuOpen(false)
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setBusy(false)
+      }
+    })()
+  }
+
+  return (
+    <>
+      <button type="button" role="menuitem" style={deleteMenuItemStyle} disabled={busy} onClick={onClick}>
+        {busy ? '删除中…' : confirming ? '确认删除' : '删除会话'}
+      </button>
+      {error ? <div style={{ ...styles.error, padding: '0 12px 6px' }}>{error}</div> : null}
+    </>
+  )
+}
+
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => openSessionFromQuery(ctx), 'dsh-enhancement: open session from query')
   ctx.effect(() => connectFocusEvents(ctx), 'dsh-enhancement: focus existing page')
@@ -1261,4 +1368,10 @@ export function apply(ctx: ClientContext): void {
       ),
     )
   }, 'dsh-enhancement: plugin config card')
+  ctx.effect(() => ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
+    ctx.slots.register(
+      { name: 'sidebar.workspaces.session.menu.item', id: 'delete-session', order: 500 },
+      DeleteSessionMenu as unknown as React.ComponentType<Record<string, unknown>>,
+    ),
+  ), 'dsh-enhancement: delete session menu')
 }

@@ -40,6 +40,7 @@ export interface GatewayConfig {
   pushSubject: string
   sessionHeaderEnabled: boolean
   sessionHeaderName: string
+  sessionDeleteConfirm: boolean
 }
 
 export interface PasswordRecord {
@@ -231,6 +232,7 @@ export function defaultConfig(host: string): GatewayConfig {
     pushSubject: 'mailto:admin@example.com',
     sessionHeaderEnabled: false,
     sessionHeaderName: DEFAULT_SESSION_HEADER_NAME,
+    sessionDeleteConfirm: true,
   }
 }
 
@@ -262,6 +264,7 @@ export function normalizeConfig(raw: Partial<GatewayConfig> | undefined, host: s
   cfg.sessionHeaderName = typeof cfg.sessionHeaderName === 'string' && /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(cfg.sessionHeaderName.trim())
     ? cfg.sessionHeaderName.trim()
     : base.sessionHeaderName
+  cfg.sessionDeleteConfirm = cfg.sessionDeleteConfirm !== false
   return cfg
 }
 

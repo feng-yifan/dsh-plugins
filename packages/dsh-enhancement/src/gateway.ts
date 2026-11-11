@@ -374,6 +374,7 @@ export class Gateway {
         reason: 'no-adapters',
         lastError: null,
       },
+      sessionDeleteConfirm: config.sessionDeleteConfirm,
     }
   }
 

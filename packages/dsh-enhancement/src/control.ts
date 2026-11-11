@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { networkInterfaces } from 'node:os'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { atomicWrite, ICONS_DIR, StateStore } from './state.js'
+import { deleteSessionStorage } from './delete-session.js'
 import { focusHub } from './focus.js'
 import type { Gateway } from './gateway.js'
 import type { Pwa } from './pwa.js'
@@ -134,6 +135,7 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     value.push = push.status()
     value.pwa.customIcons = pwa.customIcons()
     value.focusClients = focusHub.size
+    value.sessionDeleteConfirm = store.config.sessionDeleteConfirm
     if (sessionHeader !== undefined) value.sessionHeader = sessionHeader.status()
     return value
   }
@@ -188,6 +190,7 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     if (typeof body.pushEnabled === 'boolean') patch.pushEnabled = body.pushEnabled
     if (typeof body.pushSubject === 'string' && /^(mailto:|https:\/\/)/i.test(body.pushSubject.trim())) patch.pushSubject = body.pushSubject.trim()
     if (typeof body.sessionHeaderEnabled === 'boolean') patch.sessionHeaderEnabled = body.sessionHeaderEnabled
+    if (typeof body.sessionDeleteConfirm === 'boolean') patch.sessionDeleteConfirm = body.sessionDeleteConfirm
     if (typeof body.sessionHeaderName === 'string') {
       const name = body.sessionHeaderName.trim()
       // 头名必须是合法的 HTTP token，否则请求会被上游直接拒绝。
@@ -409,6 +412,27 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
       if (existsSync(path)) unlinkSync(path)
     }
     json(res, 200, await status())
+  }))
+
+  add('exact', `${PREFIX}/delete-session`, wrap(async (req, res) => {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      if (!requireAuth(req, res)) return
+      return json(res, 200, { confirmDelete: store.config.sessionDeleteConfirm })
+    }
+    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
+    if (!requireAuth(req, res)) return
+    // 本 handler 自行映射错误码，避免 wrap 把所有异常兜底成 400。
+    try {
+      const body = await readJson(req)
+      const result = await deleteSessionStorage(ctx, body.sessionId)
+      json(res, 200, result)
+    } catch (error) {
+      const err = error as { code?: unknown; message?: unknown }
+      const code = typeof err?.code === 'string' ? err.code : undefined
+      const statusCode = code === 'session.active' ? 409 : code === 'delete.unsafe-path' ? 409 : code === 'request.invalid' ? 400 : 500
+      const message = typeof err?.message === 'string' ? err.message : String(error)
+      json(res, statusCode, { error: message, code })
+    }
   }))
 
   ctx.effect?.(() => () => {
