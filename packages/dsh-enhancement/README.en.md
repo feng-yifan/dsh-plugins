@@ -80,6 +80,7 @@ The settings page shows the current mount status:
 Delete a session directly from its sidebar session menu (the entry sits above “Archive session”). Deleting physically removes the session's persisted files and **cannot be undone**.
 
 - Any session can be deleted; a running session is stopped automatically before deletion.
+- Deletion first unloads the in-memory live session (cancels the turn, flushes buffered events, and makes every client drop the row) before removing the on-disk directory; the session disappears from the list immediately instead of collapsing into “Ungrouped”.
 - A second confirmation is required by default: the first click turns the item into “确认删除” (Confirm delete), a second click performs the deletion. This can be turned off in settings.
 - Only `<sessions root>/<project>/<session id>` is removed, and the directory must actually contain a session log file (`session.v*.jsonl*`), so other files cannot be deleted by mistake.
 - The “automatic purge on uninstall” behavior has been removed: upgrading (uninstall then install) no longer loses plugin configuration.

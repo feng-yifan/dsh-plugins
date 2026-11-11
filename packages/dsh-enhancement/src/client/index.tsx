@@ -1284,6 +1284,7 @@ const deleteMenuItemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
+  lineHeight: '20px',
   width: '100%',
   padding: '8px 12px',
   border: 0,
@@ -1308,6 +1309,7 @@ function TrashIcon(): React.ReactElement {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      style={{ display: 'block', flex: 'none' }}
     >
       <path d="M2.5 4.5h11" />
       <path d="M5.5 4.5V3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5" />
@@ -1330,6 +1332,7 @@ function WarningIcon(): React.ReactElement {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      style={{ display: 'block', flex: 'none' }}
     >
       <path d="M8 2.5 14 13H2L8 2.5Z" />
       <path d="M8 6.5v3" />
@@ -1392,16 +1395,16 @@ function DeleteSessionMenu(props: SessionMenuProps): React.ReactElement {
     <>
       <button type="button" role="menuitem" style={deleteMenuItemStyle} disabled={busy} onClick={onClick}>
         {busy ? (
-          <span>删除中…</span>
+          <span style={{ lineHeight: '20px' }}>删除中…</span>
         ) : confirming ? (
           <>
             <WarningIcon />
-            <span>确认删除</span>
+            <span style={{ lineHeight: '20px' }}>确认删除</span>
           </>
         ) : (
           <>
             <TrashIcon />
-            <span>删除会话</span>
+            <span style={{ lineHeight: '20px' }}>删除会话</span>
           </>
         )}
       </button>

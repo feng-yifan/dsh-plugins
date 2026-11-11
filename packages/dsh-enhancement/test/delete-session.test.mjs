@@ -1,4 +1,5 @@
-// 删除会话的行为测试：sessionId 白名单、会话目录解析的安全边界、配置默认值。
+// 删除会话的行为测试：sessionId 白名单、会话目录解析的安全边界、
+// 内存 live 会话卸载、配置默认值。
 //
 // 运行：node --test test/delete-session.test.mjs（pretest 会先 build 到 lib/）
 import { test } from 'node:test'
@@ -115,22 +116,53 @@ function makeSessionsFixture() {
   return { base, root, sessionDir, logPath }
 }
 
-/** 假 ctx：服务由 get(name) 返回，parallel 与注册表调用都被记录。 */
-function makeFakeCtx({ root, agent, stat, onParallel, registryCalls }) {
+/** 默认注册表：记录 unarchive / unpin，list 为空。 */
+function makeRegistry(registryCalls, overrides = {}) {
+  return {
+    unarchiveSession: async (id) => registryCalls.push(['unarchive', id]),
+    unpinSession: async (id) => registryCalls.push(['unpin', id]),
+    list: () => [],
+    ...overrides,
+  }
+}
+
+/**
+ * 假 ctx：服务由 get(name) 返回，parallel / waterfall / emit 都被记录。
+ * `agents.store`、`sessions` 可分别注入，用于模拟 live 会话的卸载链路。
+ */
+function makeFakeCtx(options = {}) {
+  const {
+    root,
+    agent,
+    agentsStore,
+    sessions,
+    stat,
+    registry,
+    onParallel = [],
+    onWaterfall = [],
+    emitted = [],
+    activities = [],
+  } = options
   const services = {
-    agents: { get: () => agent },
+    agents: { get: () => agent, store: agentsStore },
+    sessions,
     sessionPersistence: { stat: async () => stat },
-    workspaceRegistry: {
-      unarchiveSession: async (id) => registryCalls.push(['unarchive', id]),
-      unpinSession: async (id) => registryCalls.push(['unpin', id]),
-      list: () => [],
-    },
+    workspaceRegistry: registry,
     // deleteSessionStorage 只调用 hp('sessions')，这里直接返回 sessions 根目录。
     dshHomePath: () => root,
   }
   return {
     get: (name) => services[name],
-    parallel: async (event, data) => onParallel.push({ event, data }),
+    parallel: async (event, data) => {
+      onParallel.push({ event, data })
+    },
+    waterfall: async (event, data) => {
+      onWaterfall.push({ event, data })
+      return activities
+    },
+    emit: (event, data) => {
+      emitted.push([event, data])
+    },
   }
 }
 
@@ -150,36 +182,36 @@ test('deleteSessionStorage：运行中 agent 会被停止，随后删除目录',
       root,
       agent,
       stat: { location: { kind: 'jsonl', path: logPath } },
+      registry: makeRegistry(registryCalls),
       onParallel,
-      registryCalls,
     })
     const result = await deleteSessionStorage(ctx, SESSION_ID)
     assert.equal(idleCalled, true)
     assert.deepEqual(onParallel, [{ event: 'workspace/session-stop', data: { sessionId: SESSION_ID } }])
     assert.equal(existsSync(sessionDir), false)
-    assert.deepEqual(result, { deleted: true, stopped: true })
+    assert.deepEqual(result, { deleted: true, stopped: true, wasLive: true })
     assert.deepEqual(registryCalls, [['unarchive', SESSION_ID], ['unpin', SESSION_ID]])
   } finally {
     rmSync(base, { recursive: true, force: true })
   }
 })
 
-test('deleteSessionStorage：无 agent 或 idle 时不等待，直接删除', async () => {
+test('deleteSessionStorage：无 agent 或 idle 时不等待', async () => {
   const { base, root, sessionDir, logPath } = makeSessionsFixture()
-  const onParallel = []
   const registryCalls = []
   try {
-    // 无 agent
+    // 无 agent：非活动，不应触发 stop
+    const onParallel = []
     const ctxNoAgent = makeFakeCtx({
       root,
       agent: undefined,
       stat: { location: { kind: 'jsonl', path: logPath } },
+      registry: makeRegistry(registryCalls),
       onParallel,
-      registryCalls,
     })
     const resultNoAgent = await deleteSessionStorage(ctxNoAgent, SESSION_ID)
-    assert.deepEqual(resultNoAgent, { deleted: true, stopped: false })
-    assert.equal(onParallel.length, 1)
+    assert.deepEqual(resultNoAgent, { deleted: true, stopped: false, wasLive: false })
+    assert.equal(onParallel.length, 0)
     assert.equal(existsSync(sessionDir), false)
 
     // idle agent：不应调用 whenIdle，也不等待
@@ -195,14 +227,147 @@ test('deleteSessionStorage：无 agent 或 idle 时不等待，直接删除', as
       root: root2,
       agent: idleAgent,
       stat: { location: { kind: 'jsonl', path: logPath2 } },
-      onParallel: [],
-      registryCalls: [],
+      registry: makeRegistry([]),
     })
     const resultIdle = await deleteSessionStorage(ctxIdle, SESSION_ID)
     assert.equal(idleCalled, false)
-    assert.deepEqual(resultIdle, { deleted: true, stopped: false })
+    assert.deepEqual(resultIdle, { deleted: true, stopped: false, wasLive: true })
     assert.equal(existsSync(sessionDir2), false)
     rmSync(base2, { recursive: true, force: true })
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('deleteSessionStorage：live 会话会被卸载（cancel / dispose / store.delete / flush / detach），再删目录', async () => {
+  const { base, root, sessionDir, logPath } = makeSessionsFixture()
+  const registryCalls = []
+  try {
+    const calls = { cancel: 0, dispose: 0, storeDelete: 0, flush: 0, detach: 0 }
+    const agent = {
+      status: 'idle',
+      cancel: () => {
+        calls.cancel += 1
+      },
+      scope: {
+        dispose: async () => {
+          calls.dispose += 1
+        },
+      },
+    }
+    const agentsStore = {
+      delete: () => {
+        calls.storeDelete += 1
+      },
+    }
+    const liveSession = { id: SESSION_ID }
+    const sessions = {
+      get: () => liveSession,
+      flush: async () => {
+        calls.flush += 1
+      },
+      store: {
+        get: () => ({
+          detach: () => {
+            calls.detach += 1
+          },
+        }),
+      },
+    }
+    const emitted = []
+    const ctx = makeFakeCtx({
+      root,
+      agent,
+      agentsStore,
+      sessions,
+      stat: { location: { kind: 'jsonl', path: logPath } },
+      registry: makeRegistry(registryCalls),
+      emitted,
+    })
+    const result = await deleteSessionStorage(ctx, SESSION_ID)
+    assert.equal(calls.cancel, 1)
+    assert.equal(calls.dispose, 1)
+    assert.equal(calls.storeDelete, 1)
+    assert.equal(calls.flush, 1)
+    assert.equal(calls.detach, 1)
+    // store entry 已 detach，就不需要再广播 session/disposed。
+    assert.deepEqual(emitted, [])
+    assert.equal(existsSync(sessionDir), false)
+    assert.deepEqual(result, { deleted: true, stopped: false, wasLive: true })
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('deleteSessionStorage：live 但没有 store entry 时广播 session/disposed', async () => {
+  const { base, root, sessionDir, logPath } = makeSessionsFixture()
+  const registryCalls = []
+  try {
+    const liveSession = { id: SESSION_ID }
+    const sessions = {
+      get: () => liveSession,
+      flush: async () => {},
+      store: { get: () => undefined },
+    }
+    const emitted = []
+    const ctx = makeFakeCtx({
+      root,
+      agent: undefined,
+      sessions,
+      stat: { location: { kind: 'jsonl', path: logPath } },
+      registry: makeRegistry(registryCalls),
+      emitted,
+    })
+    const result = await deleteSessionStorage(ctx, SESSION_ID)
+    assert.deepEqual(emitted, [['session/disposed', { id: SESSION_ID }]])
+    assert.equal(existsSync(sessionDir), false)
+    assert.deepEqual(result, { deleted: true, stopped: false, wasLive: true })
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('deleteSessionStorage：非 live 会话按 record.sessionIds 找到工作区并 detach，再删目录', async () => {
+  const { base, root, sessionDir, logPath } = makeSessionsFixture()
+  const registryCalls = []
+  try {
+    const detachedWorkspaces = []
+    const registry = makeRegistry(registryCalls, {
+      list: () => [
+        {
+          // 运行时 getter 陈旧为空，但耐久记录里仍有该会话：必须按 record 判定。
+          sessionIds: [],
+          record: { sessionIds: [SESSION_ID] },
+          detachSession: async () => {
+            detachedWorkspaces.push('record')
+          },
+        },
+        {
+          // 没有 record 时回退到 sessionIds。
+          sessionIds: [SESSION_ID],
+          detachSession: async () => {
+            detachedWorkspaces.push('fallback')
+          },
+        },
+        {
+          sessionIds: ['other'],
+          detachSession: async () => {
+            detachedWorkspaces.push('none')
+          },
+        },
+      ],
+    })
+    const ctx = makeFakeCtx({
+      root,
+      agent: undefined,
+      stat: { location: { kind: 'jsonl', path: logPath } },
+      registry,
+    })
+    const result = await deleteSessionStorage(ctx, SESSION_ID)
+    assert.deepEqual(detachedWorkspaces.sort(), ['fallback', 'record'])
+    assert.equal(existsSync(sessionDir), false)
+    assert.deepEqual(result, { deleted: true, stopped: false, wasLive: false })
+    assert.deepEqual(registryCalls, [['unarchive', SESSION_ID], ['unpin', SESSION_ID]])
   } finally {
     rmSync(base, { recursive: true, force: true })
   }
@@ -212,14 +377,12 @@ test('deleteSessionStorage：stat 取不到时返回 not-found，且目录不存
   const base = tempRoot()
   const root = join(base, 'sessions')
   const registryCalls = []
-  const onParallel = []
   try {
     const ctx = makeFakeCtx({
       root,
       agent: undefined,
       stat: undefined,
-      onParallel,
-      registryCalls,
+      registry: makeRegistry(registryCalls),
     })
     const result = await deleteSessionStorage(ctx, SESSION_ID)
     assert.deepEqual(result, { deleted: false, reason: 'not-found' })
@@ -242,8 +405,7 @@ test('deleteSessionStorage：路径越界抛 delete.unsafe-path，目录未被�
       root,
       agent: undefined,
       stat: { location: { kind: 'jsonl', path: outsideLog } },
-      onParallel: [],
-      registryCalls: [],
+      registry: makeRegistry([]),
     })
     await assert.rejects(
       () => deleteSessionStorage(ctx, SESSION_ID),
@@ -268,8 +430,7 @@ test('deleteSessionStorage：运行中且 whenIdle 超时抛 session.stop-timeou
       root,
       agent,
       stat: { location: { kind: 'jsonl', path: logPath } },
-      onParallel: [],
-      registryCalls: [],
+      registry: makeRegistry([]),
     })
     await assert.rejects(
       () => deleteSessionStorage(ctx, SESSION_ID, { stopTimeoutMs: 20 }),
