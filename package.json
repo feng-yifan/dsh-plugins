@@ -16,7 +16,8 @@
     "build:pwa-icon": "pnpm --filter dsh-pwa-icon run build",
     "build:enter-plan-mode": "pnpm --filter dsh-enter-plan-mode run build",
     "build:alertmanager": "pnpm --filter dsh-alertmanager run build",
-    "build:at-enhancement": "pnpm --filter dsh-at-enhancement run build"
+    "build:at-enhancement": "pnpm --filter dsh-at-enhancement run build",
+    "build:plan-tab-autoclose": "pnpm --filter dsh-plan-tab-autoclose run build"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

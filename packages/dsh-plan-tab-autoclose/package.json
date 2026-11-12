@@ -1,0 +1,32 @@
+{
+  "name": "dsh-plan-tab-autoclose",
+  "version": "0.1.0",
+  "description": "DSH 计划标签页自动关闭：计划评审点「同意执行」、计划模式退出后，自动关闭该会话右侧边栏里全部计划标签页（含多轮修订产生的多个）。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    "./client": { "default": "./lib/client.js" },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib","src","locale","cordis.patch.yml","README.md","README.en.md","test"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
+    "verify": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "prepare": "npm run build",
+    "pretest": "npm run build",
+    "test": "node --test test/autoclose.test.mjs"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-api-session-controller","@deepseek-ai/dsh-client-ui-sidebar-right"], "immediately": true }
+  },
+  "keywords": ["dsh","dsh-plugin","plan-mode","plan","tab","deepseek"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/feng-yifan/dsh-plugins", "directory": "packages/dsh-plan-tab-autoclose" },
+  "devDependencies": { "@types/node": "^22.20.5", "@types/react": "~18.3.12", "react": "^18.2.0", "typescript": "^6.0.3" },
+  "engines": { "node": ">=22.18.0" }
+}

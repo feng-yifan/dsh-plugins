@@ -1,0 +1,6 @@
+# dsh-plan-tab-autoclose bundle patch：插入插件行。
+# 客户端半侧监听当前会话的 plan 投影：计划模式退出（如评审点「同意执行」）时，
+# 自动关闭该会话右侧栏里全部 kind==='plan' 的计划标签页（含多轮修订产生的多个）。
+- insert:
+    - id: plan-tab-autoclose
+      name: dsh-plan-tab-autoclose
