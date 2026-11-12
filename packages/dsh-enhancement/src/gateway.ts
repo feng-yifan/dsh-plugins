@@ -374,7 +374,9 @@ export class Gateway {
         reason: 'no-adapters',
         lastError: null,
       },
+      sessionDeleteEnabled: config.sessionDeleteEnabled,
       sessionDeleteConfirm: config.sessionDeleteConfirm,
+      sessionDeleteRowAction: config.sessionDeleteRowAction,
     }
   }
 

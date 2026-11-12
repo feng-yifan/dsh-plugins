@@ -135,7 +135,9 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     value.push = push.status()
     value.pwa.customIcons = pwa.customIcons()
     value.focusClients = focusHub.size
+    value.sessionDeleteEnabled = store.config.sessionDeleteEnabled
     value.sessionDeleteConfirm = store.config.sessionDeleteConfirm
+    value.sessionDeleteRowAction = store.config.sessionDeleteRowAction
     if (sessionHeader !== undefined) value.sessionHeader = sessionHeader.status()
     return value
   }
@@ -190,7 +192,9 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     if (typeof body.pushEnabled === 'boolean') patch.pushEnabled = body.pushEnabled
     if (typeof body.pushSubject === 'string' && /^(mailto:|https:\/\/)/i.test(body.pushSubject.trim())) patch.pushSubject = body.pushSubject.trim()
     if (typeof body.sessionHeaderEnabled === 'boolean') patch.sessionHeaderEnabled = body.sessionHeaderEnabled
+    if (typeof body.sessionDeleteEnabled === 'boolean') patch.sessionDeleteEnabled = body.sessionDeleteEnabled
     if (typeof body.sessionDeleteConfirm === 'boolean') patch.sessionDeleteConfirm = body.sessionDeleteConfirm
+    if (typeof body.sessionDeleteRowAction === 'boolean') patch.sessionDeleteRowAction = body.sessionDeleteRowAction
     if (typeof body.sessionHeaderName === 'string') {
       const name = body.sessionHeaderName.trim()
       // 头名必须是合法的 HTTP token，否则请求会被上游直接拒绝。
@@ -417,10 +421,16 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
   add('exact', `${PREFIX}/delete-session`, wrap(async (req, res) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (!requireAuth(req, res)) return
-      return json(res, 200, { confirmDelete: store.config.sessionDeleteConfirm })
+      return json(res, 200, {
+        enabled: store.config.sessionDeleteEnabled,
+        confirmDelete: store.config.sessionDeleteConfirm,
+        rowAction: store.config.sessionDeleteRowAction,
+      })
     }
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
     if (!requireAuth(req, res)) return
+    // 总开关关闭后拒绝任何删除请求，避免绕过设置里的限制。
+    if (!store.config.sessionDeleteEnabled) return json(res, 403, { error: '会话删除已在设置中关闭' })
     // 本 handler 自行映射错误码，避免 wrap 把所有异常兜底成 400。
     try {
       const body = await readJson(req)

@@ -114,5 +114,7 @@ export interface StatusPayload {
   notify: NotifyStatus
   push: PushStatus
   sessionHeader: SessionHeaderStatus
+  sessionDeleteEnabled: boolean
   sessionDeleteConfirm: boolean
+  sessionDeleteRowAction: boolean
 }

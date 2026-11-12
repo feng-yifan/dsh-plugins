@@ -101,6 +101,25 @@ test('normalizeConfig：sessionDeleteConfirm 默认开、可显式关闭', () =>
   assert.equal(normalizeConfig({ sessionDeleteConfirm: true }, HOST).sessionDeleteConfirm, true)
 })
 
+test('normalizeConfig：sessionDeleteEnabled 默认开、可显式关闭', () => {
+  assert.equal(normalizeConfig({}, HOST).sessionDeleteEnabled, true)
+  assert.equal(normalizeConfig({ sessionDeleteEnabled: false }, HOST).sessionDeleteEnabled, false)
+  assert.equal(normalizeConfig({ sessionDeleteEnabled: true }, HOST).sessionDeleteEnabled, true)
+})
+
+test('normalizeConfig：sessionDeleteRowAction 默认关、可显式开启', () => {
+  assert.equal(normalizeConfig({}, HOST).sessionDeleteRowAction, false)
+  assert.equal(normalizeConfig({ sessionDeleteRowAction: true }, HOST).sessionDeleteRowAction, true)
+  assert.equal(normalizeConfig({ sessionDeleteRowAction: false }, HOST).sessionDeleteRowAction, false)
+})
+
+test('normalizeConfig：删除相关字段非布尔值回落默认', () => {
+  const cfg = normalizeConfig({ sessionDeleteEnabled: 'false', sessionDeleteConfirm: 'false', sessionDeleteRowAction: 'true' }, HOST)
+  assert.equal(cfg.sessionDeleteEnabled, true)
+  assert.equal(cfg.sessionDeleteConfirm, true)
+  assert.equal(cfg.sessionDeleteRowAction, false)
+})
+
 // ---- deleteSessionStorage 行为测试（假 ctx） ----
 
 const SESSION_ID = 'sessX'

@@ -40,7 +40,12 @@ export interface GatewayConfig {
   pushSubject: string
   sessionHeaderEnabled: boolean
   sessionHeaderName: string
+  /** 会话删除总开关。 */
+  sessionDeleteEnabled: boolean
+  /** 删除前二次确认。 */
   sessionDeleteConfirm: boolean
+  /** 会话行悬停时显示删除按钮。 */
+  sessionDeleteRowAction: boolean
 }
 
 export interface PasswordRecord {
@@ -232,7 +237,9 @@ export function defaultConfig(host: string): GatewayConfig {
     pushSubject: 'mailto:admin@example.com',
     sessionHeaderEnabled: false,
     sessionHeaderName: DEFAULT_SESSION_HEADER_NAME,
+    sessionDeleteEnabled: true,
     sessionDeleteConfirm: true,
+    sessionDeleteRowAction: false,
   }
 }
 
@@ -264,7 +271,9 @@ export function normalizeConfig(raw: Partial<GatewayConfig> | undefined, host: s
   cfg.sessionHeaderName = typeof cfg.sessionHeaderName === 'string' && /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(cfg.sessionHeaderName.trim())
     ? cfg.sessionHeaderName.trim()
     : base.sessionHeaderName
+  cfg.sessionDeleteEnabled = cfg.sessionDeleteEnabled !== false
   cfg.sessionDeleteConfirm = cfg.sessionDeleteConfirm !== false
+  cfg.sessionDeleteRowAction = cfg.sessionDeleteRowAction === true
   return cfg
 }
 
