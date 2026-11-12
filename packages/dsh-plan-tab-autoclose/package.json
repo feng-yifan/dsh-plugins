@@ -1,6 +1,6 @@
 {
   "name": "dsh-plan-tab-autoclose",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "DSH 计划标签页自动关闭：计划评审点「同意执行」、计划模式退出后，自动关闭该会话右侧边栏里全部计划标签页（含多轮修订产生的多个）。",
   "type": "module",
   "main": "./lib/index.js",
