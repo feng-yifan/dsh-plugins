@@ -1283,12 +1283,13 @@ interface SessionMenuProps {
 const deleteMenuItemStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 6,
   lineHeight: '20px',
+  minHeight: 34,
   width: '100%',
-  padding: '8px 12px',
+  padding: '6px 8px',
   border: 0,
-  borderRadius: 8,
+  borderRadius: 12,
   background: 'transparent',
   textAlign: 'left',
   cursor: 'pointer',
@@ -1296,12 +1297,12 @@ const deleteMenuItemStyle: React.CSSProperties = {
   color: 'var(--dsw-alias-state-error-primary, #d92d20)',
 }
 
-/** 内联垃圾桶图标（16px 描边，复制自 Fluent 轮廓风格，避免依赖内部 primitives）。 */
+/** 内联垃圾桶图标（14px 描边，复制自 Fluent 轮廓风格，避免依赖内部 primitives）。 */
 function TrashIcon(): React.ReactElement {
   return (
     <svg
-      width={16}
-      height={16}
+      width={14}
+      height={14}
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
@@ -1319,12 +1320,12 @@ function TrashIcon(): React.ReactElement {
   )
 }
 
-/** 内联警告三角图标（16px 描边，用于二次确认态）。 */
+/** 内联警告三角图标（14px 描边，用于二次确认态）。 */
 function WarningIcon(): React.ReactElement {
   return (
     <svg
-      width={16}
-      height={16}
+      width={14}
+      height={14}
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
