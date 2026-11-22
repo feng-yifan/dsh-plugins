@@ -62,9 +62,13 @@ self.addEventListener('notificationclick', (event) => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const sameOrigin = all.filter((client) => { try { return new URL(client.url).origin === self.location.origin; } catch (error) { return false; } });
     if (sameOrigin.length > 0) {
-      const client = sameOrigin[0];
-      await client.focus();
-      if (sessionId && client.postMessage) client.postMessage({ type: 'dsh-enhancement-open-session', sessionId });
+      const client = sameOrigin.find((item) => item.focused) || sameOrigin[0];
+      try { await client.focus(); } catch (error) { /* focus may be blocked by the browser */ }
+      if (sessionId && client.postMessage) {
+        client.postMessage({ type: 'dsh-enhancement-open-session', sessionId });
+      } else if (!sessionId && typeof client.navigate === 'function') {
+        try { await client.navigate(url); } catch (error) { /* navigate may be blocked */ }
+      }
       return;
     }
     await self.clients.openWindow(url);
@@ -124,6 +128,8 @@ function manifest(store: { config: { pwaName: string; pwaShortName: string; pwaD
     start_url: '/',
     scope: '/',
     display: config.pwaDisplay,
+    launch_handler: { client_mode: 'navigate-existing' },
+    handle_links: 'preferred',
     background_color: config.pwaBackgroundColor,
     theme_color: config.pwaThemeColor,
     lang: 'zh-CN',

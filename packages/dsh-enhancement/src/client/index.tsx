@@ -1459,7 +1459,9 @@ function openSessionFromQuery(ctx: ClientContext): () => void {
   }
   const onMessage = (event: MessageEvent) => {
     const data = event.data as { type?: string; sessionId?: string } | undefined
-    if (data?.type === 'dsh-enhancement-open-session' && data.sessionId && SESSION_ID_PATTERN.test(data.sessionId)) openSession(ctx, data.sessionId)
+    if (data?.type !== 'dsh-enhancement-open-session') return
+    try { window.focus() } catch { /* focus may be blocked by the browser */ }
+    if (data.sessionId && SESSION_ID_PATTERN.test(data.sessionId)) openSession(ctx, data.sessionId)
   }
   read()
   window.addEventListener('popstate', read)

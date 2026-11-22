@@ -318,7 +318,7 @@ test('deleteSessionStorage：live 会话会被卸载（cancel / dispose / store.
   }
 })
 
-test('deleteSessionStorage：live 但没有 store entry 时广播带 live Session 对象的 session/disposed', async () => {
+test('deleteSessionStorage：live 但取不到 store entry 时补发 api-session/removed', async () => {
   const { base, root, sessionDir, logPath } = makeSessionsFixture()
   const registryCalls = []
   try {
@@ -338,10 +338,32 @@ test('deleteSessionStorage：live 但没有 store entry 时广播带 live Sessio
       emitted,
     })
     const result = await deleteSessionStorage(ctx, SESSION_ID)
-    // 新签名 session/disposed 的事件载荷是 Session 对象本身，而非 { id }。
-    assert.deepEqual(emitted, [['session/disposed', liveSession]])
+    // 没有 store entry 就无法走 session/disposed，直接向客户端补发移除事件。
+    assert.deepEqual(emitted, [['api-session/removed', SESSION_ID]])
     assert.equal(existsSync(sessionDir), false)
     assert.deepEqual(result, { deleted: true, stopped: false, wasLive: true })
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})
+
+test('deleteSessionStorage：冷会话删除后补发 api-session/removed，避免残留未分组', async () => {
+  const { base, root, sessionDir, logPath } = makeSessionsFixture()
+  const registryCalls = []
+  try {
+    const emitted = []
+    const ctx = makeFakeCtx({
+      root,
+      agent: undefined,
+      stat: { location: { kind: 'jsonl', path: logPath } },
+      registry: makeRegistry(registryCalls),
+      emitted,
+    })
+    const result = await deleteSessionStorage(ctx, SESSION_ID)
+    assert.deepEqual(emitted, [['api-session/removed', SESSION_ID]])
+    assert.equal(existsSync(sessionDir), false)
+    assert.deepEqual(result, { deleted: true, stopped: false, wasLive: false })
+    assert.deepEqual(registryCalls, [['unarchive', SESSION_ID], ['unpin', SESSION_ID]])
   } finally {
     rmSync(base, { recursive: true, force: true })
   }

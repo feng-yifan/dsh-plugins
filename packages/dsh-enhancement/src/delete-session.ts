@@ -328,14 +328,10 @@ export async function deleteSessionStorage(
       /* best-effort */
     }
   }
-  // 没有 live store 记录（或已无 live 会话）时，显式广播，让所有客户端丢弃该行。
-  // 新签名要求携带 live Session 对象；没有 live 会话时无从广播，只能依赖磁盘删除。
-  if (!detached && liveSession) {
-    try {
-      ctx.emit?.('session/disposed', liveSession)
-    } catch {
-      /* best-effort */
-    }
+  // 卸载后确认：若内存里已无该 live 会话，说明 session/disposed 已随 disposal 发出，
+  // 客户端会通过 api-session/removed 桥接移除该行，无需再补发。
+  if (!detached && liveSession && sessions?.get?.(id) === undefined) {
+    detached = true
   }
 
   // 空白会话可能在 flush 后才落盘，所以卸载之后再取一次 stat。
@@ -355,6 +351,16 @@ export async function deleteSessionStorage(
   // 物理删除目录（存在才删）。
   if (dir) {
     rmSync(dir, { recursive: true, force: true })
+  }
+
+  // 冷会话（或 live 但未走 detach）没有 session/disposed，客户端收不到 api-session/removed。
+  // 这里补发一次移除事件，避免旧行残留到「未分组」。该事件对未知会话幂等，重复发送无副作用。
+  if (!detached) {
+    try {
+      ctx.emit?.('api-session/removed', id)
+    } catch {
+      /* best-effort */
+    }
   }
 
   const wasLive = Boolean(agent || liveSession)
