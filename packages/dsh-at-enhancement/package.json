@@ -1,6 +1,6 @@
 {
   "name": "dsh-at-enhancement",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH 外部 @ 文件引用增强：让输入框里的 @ 补全可以逐级浏览并引用工作区外的任意绝对路径文件/目录，选中后插入绝对路径，由 read 工具按路径读取。",
   "type": "module",
   "main": "./lib/index.js",
@@ -66,6 +66,6 @@
   },
   "engines": {
     "node": ">=22.18.0",
-    "dsh": "^0.2.3-alpha.2"
+    "dsh": ">=0.2.2-rc.2 <0.3.0-0"
   }
 }
