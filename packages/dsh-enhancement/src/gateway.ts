@@ -311,13 +311,7 @@ export class Gateway {
   status(interfaces: NetworkInterfaceInfo[]): Status {
     const config = this.store.config
     const origin = this.ctx.webServer.getOrigin()
-    let dshAccessUrl = origin
-    try {
-      const connection = this.ctx.get('connection') as { authenticatedUrl?: (url: string) => string } | undefined
-      if (connection?.authenticatedUrl) dshAccessUrl = connection.authenticatedUrl(origin)
-    } catch {
-      /* connection service unavailable; keep clean origin */
-    }
+    const dshAccessUrl = origin
     const displayHost = config.bindHost === '0.0.0.0' || config.bindHost === '::' ? this.ctx.webServer.host : config.bindHost
     const url = this.started ? `${this.secure ? 'https' : 'http'}://${formatHost(displayHost)}:${config.port}` : null
     return {

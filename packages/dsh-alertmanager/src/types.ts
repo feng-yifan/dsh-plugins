@@ -16,21 +16,17 @@ export interface LoggerLike {
   error?(...args: unknown[]): void
 }
 
-/** `webServer.register()` 接受的精确路径路由。 */
+/** `webServer.register()` 接受的精确路径路由。`auth` 由 DSH 在路由层执行鉴权。 */
 export interface WebRouteLike {
   kind: 'exact' | 'prefix'
   path: string
   handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  auth?: 'anonymous' | 'required' | 'deny'
 }
 
 /** `ctx.webServer` 中本插件用到的切片。 */
 export interface WebServerLike {
   register(route: WebRouteLike): () => void
-}
-
-/** `ctx.connection` 中本插件用到的切片；`requestRejection` 返回状态码即拒绝。 */
-export interface ConnectionLike {
-  requestRejection(req: IncomingMessage): number | undefined
 }
 
 /**

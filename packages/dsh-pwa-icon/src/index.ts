@@ -68,6 +68,12 @@ interface HostRoute {
   kind: 'exact' | 'prefix'
   path: string
   handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  /**
+   * 路由准入策略。DSH 0.2.2-rc.2 起 `webServer.register` 默认 `required`
+   * （未带凭据即 503），浏览器取 manifest / 图标时不带凭据，故这些公开静态
+   * 资源必须显式声明 `anonymous`（与 DSH 自带 dist 资源同款）。
+   */
+  auth?: 'anonymous' | 'required' | 'deny'
 }
 
 /** 宿主 cordis Context 中本插件用到的切片。 */
@@ -403,6 +409,8 @@ function registerFileRoute(ctx: HostContext, route: string, filePath: string, mi
       ctx.webServer.register({
         kind: 'exact',
         path: route,
+        // 公开静态资源：浏览器取图标不带凭据，必须显式匿名（默认 required 会 503）。
+        auth: 'anonymous',
         handler: async (req, res) => {
           if (!methodAllowed(req)) {
             respond(req, res, 405, { allow: 'GET, HEAD' })
@@ -552,6 +560,8 @@ export function apply(ctx: HostContext, rawConfig?: Config): void {
       ctx.webServer.register({
         kind: 'exact',
         path: manifestUrl,
+        // 公开静态资源：浏览器取 manifest 不带凭据，必须显式匿名（默认 required 会 503）。
+        auth: 'anonymous',
         handler: (req, res) => {
           if (!methodAllowed(req)) {
             respond(req, res, 405, { allow: 'GET, HEAD' })

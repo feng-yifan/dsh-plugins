@@ -13,6 +13,7 @@ export interface WebRouteLike {
   kind: 'exact' | 'prefix'
   path: string
   handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  auth?: 'anonymous' | 'required' | 'deny'
 }
 
 export interface WebUpgradeRouteLike {
@@ -28,10 +29,6 @@ export interface WebServerLike {
   register(route: WebRouteLike): () => void
   registerUpgrade?(route: WebUpgradeRouteLike): () => void
   tapIndex?(transform: (html: string) => string): () => void
-}
-
-export interface ConnectionLike {
-  requestRejection(req: IncomingMessage): number | undefined
 }
 
 export interface LoggerLike {

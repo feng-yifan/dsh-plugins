@@ -12,6 +12,7 @@ export interface WebRouteLike {
   kind: 'exact' | 'prefix'
   path: string
   handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  auth?: 'anonymous' | 'required' | 'deny'
 }
 
 export interface WebServerLike {
@@ -20,10 +21,6 @@ export interface WebServerLike {
   protocol: string
   getOrigin(): string
   register(route: WebRouteLike): () => void
-}
-
-export interface ConnectionLike {
-  requestRejection(req: IncomingMessage): number | undefined
 }
 
 export interface LoggerLike {

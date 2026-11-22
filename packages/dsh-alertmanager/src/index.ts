@@ -7,8 +7,8 @@
  *   GET  /_dsh/alertmanager/alerts    并行拉取全部实例并聚合
  *   POST /_dsh/alertmanager/dispatch  在指定工作区新建会话并派发选中告警
  *
- * 设置存 DSH 凭据服务；其它宿主服务（connection / sessionController /
- * workspaceRegistry）都按需惰性获取，缺失时返回可读 503，不让插件激活失败。
+ * 设置存 DSH 凭据服务；其它宿主服务（sessionController / workspaceRegistry）
+ * 都按需惰性获取，缺失时返回可读 503，不让插件激活失败。
  * 所有错误响应都带稳定 `code`，`error` 保留中文兜底。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -16,7 +16,6 @@ import { AlertmanagerAggregateError, AlertmanagerError, AlertmanagerSource } fro
 import { dispatchAlerts, DispatchError } from './dispatch.js'
 import { publicSettings, readSettings, saveSettings, SettingsError } from './settings.js'
 import type {
-  ConnectionLike,
   CredentialsLike,
   HostContextLike,
   SessionControllerLike,
@@ -45,18 +44,6 @@ function jsonError(
   extra: Record<string, unknown> = {},
 ): void {
   json(res, status, { error: message, code, ...extra })
-}
-
-/** 照抄 dsh-enhancement：只有通过 Host/Origin 围栏且携带有效浏览器会话的请求才放行。 */
-function authorized(ctx: HostContextLike, req: IncomingMessage): number | null {
-  const connection = ctx.get('connection') as ConnectionLike | undefined
-  if (!connection || typeof connection.requestRejection !== 'function') return 503
-  try {
-    const rejection = connection.requestRejection(req)
-    return rejection === undefined ? null : rejection
-  } catch {
-    return 503
-  }
 }
 
 async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<Record<string, unknown>> {
@@ -160,24 +147,12 @@ export function apply(ctx: HostContextLike): void {
     }
   }
 
-  const requireAuth = (req: IncomingMessage, res: ServerResponse): boolean => {
-    const rejection = authorized(ctx, req)
-    if (rejection === null) return true
-    if (rejection === 503) {
-      jsonError(res, 503, 'connection.unavailable', 'DSH 连接服务不可用')
-    } else {
-      jsonError(res, rejection, 'auth.required', '需要登录后访问')
-    }
-    return false
-  }
-
   const add = (path: string, handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>): void => {
-    disposers.push(ctx.webServer.register({ kind: 'exact', path, handler: wrap(handler) }))
+    disposers.push(ctx.webServer.register({ kind: 'exact', path, handler: wrap(handler), auth: 'required' }))
   }
 
   // 同一 exact 路径只能注册一次（重复注册会抛错），GET 与 POST 在处理器内分流。
   add(`${PREFIX}/settings`, async (req, res) => {
-    if (!requireAuth(req, res)) return
     const credentials = credentialsOf(ctx)
     if (credentials === undefined) {
       jsonError(res, 503, 'credentials.unavailable', '凭据服务不可用，无法读写 AlertManager 设置')
@@ -199,7 +174,6 @@ export function apply(ctx: HostContextLike): void {
   })
 
   add(`${PREFIX}/alerts`, async (req, res) => {
-    if (!requireAuth(req, res)) return
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       jsonError(res, 405, 'request.method-not-allowed', 'method not allowed')
       return
@@ -218,7 +192,6 @@ export function apply(ctx: HostContextLike): void {
   })
 
   add(`${PREFIX}/dispatch`, async (req, res) => {
-    if (!requireAuth(req, res)) return
     if (req.method !== 'POST') {
       jsonError(res, 405, 'request.method-not-allowed', 'method not allowed')
       return

@@ -318,7 +318,7 @@ test('deleteSessionStorage：live 会话会被卸载（cancel / dispose / store.
   }
 })
 
-test('deleteSessionStorage：live 但没有 store entry 时广播 session/disposed', async () => {
+test('deleteSessionStorage：live 但没有 store entry 时广播带 live Session 对象的 session/disposed', async () => {
   const { base, root, sessionDir, logPath } = makeSessionsFixture()
   const registryCalls = []
   try {
@@ -338,7 +338,8 @@ test('deleteSessionStorage：live 但没有 store entry 时广播 session/dispos
       emitted,
     })
     const result = await deleteSessionStorage(ctx, SESSION_ID)
-    assert.deepEqual(emitted, [['session/disposed', { id: SESSION_ID }]])
+    // 新签名 session/disposed 的事件载荷是 Session 对象本身，而非 { id }。
+    assert.deepEqual(emitted, [['session/disposed', liveSession]])
     assert.equal(existsSync(sessionDir), false)
     assert.deepEqual(result, { deleted: true, stopped: false, wasLive: true })
   } finally {

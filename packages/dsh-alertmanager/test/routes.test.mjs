@@ -402,15 +402,7 @@ test('POST /dispatch 成功：按实例 fresh 拉取、建会话并发送分组 
   )
 })
 
-test('缺少连接服务 / 凭据服务 / 会话服务时返回 503 + 稳定 code', async () => {
-  const noConnection = makeCtx({ connection: false })
-  const connectionResult = await invoke(noConnection.routes.get(`${PREFIX}/settings`), {
-    method: 'GET',
-    url: `${PREFIX}/settings`,
-  })
-  assert.equal(connectionResult.status, 503)
-  assert.equal(connectionResult.json.code, 'connection.unavailable')
-
+test('缺少会话服务时返回 503 + 稳定 code', async () => {
   const noSession = makeCtx({
     initialSettings: {
       version: 2,

@@ -55,7 +55,8 @@
     "typescript": "^6.0.3"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.18.0",
+    "dsh": "^0.2.3-alpha.2"
   },
   "license": "MIT",
   "repository": {

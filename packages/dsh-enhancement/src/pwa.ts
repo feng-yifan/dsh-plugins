@@ -198,6 +198,7 @@ export class Pwa {
       this.add(ctx.webServer.register({
         kind: 'exact',
         path: '/manifest.webmanifest',
+        auth: 'anonymous',
         handler: (req, res) => {
           if (!methodAllowed(req)) return respond(req, res, 405, { allow: 'GET, HEAD' })
           const body = manifest(store)
@@ -212,6 +213,7 @@ export class Pwa {
       this.add(ctx.webServer.register({
         kind: 'exact',
         path: '/sw.js',
+        auth: 'anonymous',
         handler: (req, res) => {
           if (!methodAllowed(req)) return respond(req, res, 405, { allow: 'GET, HEAD' })
           respond(req, res, 200, {
@@ -225,6 +227,7 @@ export class Pwa {
       this.add(ctx.webServer.register({
         kind: 'prefix',
         path: ICON_PREFIX,
+        auth: 'anonymous',
         handler: async (req, res) => {
           if (!methodAllowed(req)) return respond(req, res, 405, { allow: 'GET, HEAD' })
           const url = new URL(req.url ?? '/', 'http://localhost')

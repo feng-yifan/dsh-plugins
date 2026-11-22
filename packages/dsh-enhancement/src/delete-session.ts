@@ -329,9 +329,10 @@ export async function deleteSessionStorage(
     }
   }
   // 没有 live store 记录（或已无 live 会话）时，显式广播，让所有客户端丢弃该行。
-  if (!detached) {
+  // 新签名要求携带 live Session 对象；没有 live 会话时无从广播，只能依赖磁盘删除。
+  if (!detached && liveSession) {
     try {
-      ctx.emit?.('session/disposed', { id })
+      ctx.emit?.('session/disposed', liveSession)
     } catch {
       /* best-effort */
     }

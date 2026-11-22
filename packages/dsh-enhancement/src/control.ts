@@ -1,9 +1,9 @@
 /**
  * dsh-enhancement · 控制 API（挂在 DSH webServer 的 /_dsh/enhancement/*）
  *
- * 鉴权使用 DSH 官方的 ctx.connection.requestRejection(req)：只有通过 DSH
- * Host/Origin 围栏且携带有效浏览器会话的请求才放行；网关代理会给上游注入
- * 短时 DSH 会话 cookie，所以通过网关访问同样有效。
+ * 鉴权交给 DSH 的 webServer 路由层：注册路由时显式声明 auth: 'required'，
+ * DSH 在调用 handler 前完成 Host/Origin 围栏与浏览器会话校验，未通过不会进入 handler。
+ * 网关代理会给上游注入短时 DSH 会话 cookie，所以通过网关访问同样有效。
  */
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
@@ -17,7 +17,7 @@ import type { Pwa } from './pwa.js'
 import type { NotificationEngine } from './notify.js'
 import type { PushService } from './push.js'
 import { caCertificatePem, generateSelfSigned, installUploadedCa, installUploadedCertificate, tlsStatus, useStoredUploadedCa } from './tls.js'
-import type { ConnectionLike, HostContextLike, NetworkInterfaceInfo, StatusPayload } from './types.js'
+import type { HostContextLike, NetworkInterfaceInfo, StatusPayload } from './types.js'
 import type { SessionHeaderMount } from './session-header.js'
 
 const PREFIX = '/_dsh/enhancement'
@@ -53,17 +53,6 @@ function interfaces(): NetworkInterfaceInfo[] {
   }
   result.sort((a, b) => Number(a.internal) - Number(b.internal) || a.name.localeCompare(b.name) || a.address.localeCompare(b.address))
   return result
-}
-
-function authorized(ctx: HostContextLike, req: IncomingMessage): number | null {
-  const connection = ctx.get('connection') as ConnectionLike | undefined
-  if (!connection || typeof connection.requestRejection !== 'function') return 503
-  try {
-    const rejection = connection.requestRejection(req)
-    return rejection === undefined ? null : rejection
-  } catch {
-    return 503
-  }
 }
 
 async function readJson(req: IncomingMessage, limit = 64 * 1024): Promise<Record<string, unknown>> {
@@ -120,13 +109,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
     }
   }
 
-  const requireAuth = (req: IncomingMessage, res: ServerResponse): boolean => {
-    const rejection = authorized(ctx, req)
-    if (rejection === null) return true
-    json(res, rejection, { error: rejection === 503 ? 'DSH connection service unavailable' : 'authentication required' })
-    return false
-  }
-
   const status = async (): Promise<StatusPayload> => {
     await gateway.refreshDshSecret()
     const value = gateway.status(interfaces())
@@ -143,24 +125,21 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
   }
 
   const add = (kind: 'exact' | 'prefix', path: string, handler: (req: IncomingMessage, res: ServerResponse) => void) => {
-    disposers.push(ctx.webServer.register({ kind, path, handler }))
+    disposers.push(ctx.webServer.register({ kind, path, handler, auth: 'required' }))
   }
 
   add('exact', `${PREFIX}/focus`, wrap(async (req, res) => {
     if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     focusHub.subscribe(req, res)
   }))
 
   add('exact', `${PREFIX}/status`, wrap(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     json(res, 200, await status())
   }))
 
   add('exact', `${PREFIX}/config`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     const patch: Record<string, unknown> = {}
     if (typeof body.enabled === 'boolean') patch.enabled = body.enabled
@@ -221,7 +200,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/password`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     const next = typeof body.newPassword === 'string' ? body.newPassword : ''
     if (next.length < 6) return json(res, 400, { error: '新密码至少 6 个字符' })
@@ -233,14 +211,12 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/logout-all`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     store.rotateGateSecret()
     json(res, 200, { ok: true })
   }))
 
   add('exact', `${PREFIX}/restart`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     json(res, 200, await status())
     scheduleRestart()
   }))
@@ -248,7 +224,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/upload`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req, 256 * 1024)
     const certPem = typeof body.certPem === 'string' ? body.certPem : ''
     const keyPem = typeof body.keyPem === 'string' ? body.keyPem : ''
@@ -264,7 +239,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/upload-ca`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req, 256 * 1024)
     const caCertPem = typeof body.caCertPem === 'string' ? body.caCertPem : ''
     const caKeyPem = typeof body.caKeyPem === 'string' ? body.caKeyPem : ''
@@ -279,7 +253,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/use-ca`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     await useStoredUploadedCa(store.config, ctx.webServer.host)
     store.updateConfig({ httpsMode: 'ca' })
@@ -289,7 +262,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/selfsigned`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     if (Array.isArray(body.httpsHostnames)) {
       store.updateConfig({
@@ -306,7 +278,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/off`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     store.updateConfig({ httpsMode: 'off' })
     json(res, 200, await status())
@@ -315,7 +286,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/ca`, wrap(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const pem = caCertificatePem()
     if (!pem) return json(res, 404, { error: '尚未生成或上传 CA 证书' })
     res.writeHead(200, {
@@ -328,14 +298,12 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/tls/status`, wrap(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     json(res, 200, tlsStatus(store.config, ctx.webServer.host))
   }))
 
 
   add('exact', `${PREFIX}/notify/test`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     notify.test()
     json(res, 200, { ok: true })
   }))
@@ -343,13 +311,11 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/push/status`, wrap(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     json(res, 200, push.status())
   }))
 
   add('exact', `${PREFIX}/push/subscribe`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req, 64 * 1024)
     const endpoint = typeof body.endpoint === 'string' ? body.endpoint : ''
     const keys = body.keys as { p256dh?: unknown; auth?: unknown } | undefined
@@ -368,7 +334,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/push/unsubscribe`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     if (typeof body.endpoint === 'string') push.unsubscribe(body.endpoint)
     json(res, 200, await status())
@@ -376,7 +341,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/push/test`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const result = await push.test()
     json(res, 200, { ...result, ...push.status() })
   }))
@@ -384,7 +348,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/icons/upload`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req, 3 * 1024 * 1024)
     const kind = typeof body.kind === 'string' ? body.kind : ''
     const expected = ICON_KINDS[kind]
@@ -406,7 +369,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/icons/reset`, wrap(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     const body = await readJson(req)
     const kind = typeof body.kind === 'string' ? body.kind : ''
     if (kind && !ICON_KINDS[kind]) return json(res, 400, { error: '未知图标类型' })
@@ -420,7 +382,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
 
   add('exact', `${PREFIX}/delete-session`, wrap(async (req, res) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
-      if (!requireAuth(req, res)) return
       return json(res, 200, {
         enabled: store.config.sessionDeleteEnabled,
         confirmDelete: store.config.sessionDeleteConfirm,
@@ -428,7 +389,6 @@ export function registerControl(ctx: HostContextLike, gateway: Gateway, store: S
       })
     }
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    if (!requireAuth(req, res)) return
     // 总开关关闭后拒绝任何删除请求，避免绕过设置里的限制。
     if (!store.config.sessionDeleteEnabled) return json(res, 403, { error: '会话删除已在设置中关闭' })
     // 本 handler 自行映射错误码，避免 wrap 把所有异常兜底成 400。
